@@ -36,4 +36,11 @@ export type GenericZomeSignal = {
   link_type: string;
 };
 
-export type EntryTypes = {};
+/* dprint-ignore-start */
+export type EntryTypes =
+ | ({  type: 'Thing'; } & Thing);
+/* dprint-ignore-end */
+
+export interface Thing {
+  content: string;
+}
