@@ -62,112 +62,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
     match input.links {
         Some(links) => {
             for link in links {
-                match link.node_id {
-                    NodeId::Agent(agent) => match link.direction {
-                        LinkDirection::To => {
-                            create_link(
-                                thing_id.clone(),
-                                agent,
-                                LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, None, None)?,
-                            )?;
-                        }
-                        LinkDirection::From => {
-                            create_link(
-                                agent,
-                                thing_id.clone(),
-                                LinkTypes::ToThing,
-                                derive_link_tag(link.tag, None, None)?,
-                            )?;
-                        }
-                        LinkDirection::Bidirectional => {
-                            let backlink_action_hash = create_link(
-                                agent.clone(),
-                                thing_id.clone(),
-                                LinkTypes::ToThing,
-                                derive_link_tag(link.tag.clone(), None, None)?,
-                            )?;
-                            create_link(
-                                thing_id.clone(),
-                                agent,
-                                LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
-                            )?;
-                        }
-                    },
-                    NodeId::Anchor(anchor) => {
-                        let path = Path::from(anchor.clone());
-                        let path_entry_hash = path.path_entry_hash()?;
-                        match link.direction {
-                            LinkDirection::To => {
-                                create_link(
-                                    thing_id.clone(),
-                                    path_entry_hash,
-                                    LinkTypes::ToAgent,
-                                    derive_link_tag(link.tag, None, Some(anchor))?,
-                                )?;
-                            }
-                            LinkDirection::From => {
-                                create_link(
-                                    path_entry_hash,
-                                    thing_id.clone(),
-                                    LinkTypes::ToThing,
-                                    derive_link_tag(link.tag, None, Some(anchor))?,
-                                )?;
-                            }
-                            LinkDirection::Bidirectional => {
-                                let backlink_action_hash = create_link(
-                                    path_entry_hash.clone(),
-                                    thing_id.clone(),
-                                    LinkTypes::ToThing,
-                                    derive_link_tag(link.tag.clone(), None, Some(anchor.clone()))?,
-                                )?;
-                                create_link(
-                                    thing_id.clone(),
-                                    path_entry_hash,
-                                    LinkTypes::ToAgent,
-                                    derive_link_tag(
-                                        link.tag,
-                                        Some(backlink_action_hash),
-                                        Some(anchor),
-                                    )?,
-                                )?;
-                            }
-                        }
-                    }
-                    NodeId::Thing(action_hash) => match link.direction {
-                        LinkDirection::To => {
-                            create_link(
-                                thing_id.clone(),
-                                action_hash,
-                                LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, None, None)?,
-                            )?;
-                        }
-                        LinkDirection::From => {
-                            create_link(
-                                action_hash,
-                                thing_id.clone(),
-                                LinkTypes::ToThing,
-                                derive_link_tag(link.tag, None, None)?,
-                            )?;
-                        }
-                        LinkDirection::Bidirectional => {
-                            let backlink_action_hash = create_link(
-                                action_hash.clone(),
-                                thing_id.clone(),
-                                LinkTypes::ToThing,
-                                derive_link_tag(link.tag.clone(), None, None)?,
-                            )?;
-                            create_link(
-                                thing_id.clone(),
-                                action_hash,
-                                LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
-                            )?;
-                        }
-                    },
-                }
+                create_link_from_node_by_hash(thing_id.clone().into(), link)?;
             }
         }
         None => (),
@@ -461,11 +356,7 @@ pub fn get_all_linked_nodes(node_id: NodeId) -> ExternResult<Vec<Node>> {
 
 #[hdk_extern]
 pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<AgentPubKey>> {
-    let base: AnyLinkableHash = match node_id {
-        NodeId::Agent(a) => a.into(),
-        NodeId::Anchor(a) => Path::from(a).path_entry_hash()?.into(),
-        NodeId::Thing(a) => a.into(),
-    };
+    let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAgent)?.build())?;
     Ok(links
         .into_iter()
@@ -476,13 +367,8 @@ pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<AgentPubKey>> {
 
 #[hdk_extern]
 pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<String>> {
-    let base: AnyLinkableHash = match node_id {
-        NodeId::Agent(a) => a.into(),
-        NodeId::Anchor(a) => Path::from(a).path_entry_hash()?.into(),
-        NodeId::Thing(a) => a.into(),
-    };
+    let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAnchor)?.build())?;
-
     Ok(links
         .into_iter()
         .map(|l| deserialize_link_tag(l.tag.0).ok())
@@ -494,11 +380,7 @@ pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<String>> {
 
 #[hdk_extern]
 pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
-    let base: AnyLinkableHash = match node_id {
-        NodeId::Agent(a) => a.into(),
-        NodeId::Anchor(a) => Path::from(a).path_entry_hash()?.into(),
-        NodeId::Thing(a) => a.into(),
-    };
+    let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToThing)?.build())?;
     let get_input: Vec<GetInput> = links
         .into_iter()
@@ -522,6 +404,228 @@ pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
         .map(|r| thing_record_to_thing(r).ok())
         .filter_map(|t| t)
         .collect())
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CreateOrDeleteLinkInput {
+    pub src: NodeId,
+    pub links: Vec<LinkInput>,
+}
+
+#[hdk_extern]
+pub fn create_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()> {
+    let base: HoloHash<hash_type::AnyLinkable> = linkable_hash_from_node_id(input.src)?;
+    for link in input.links {
+        create_link_from_node_by_hash(base.clone(), link)?;
+    }
+    Ok(())
+}
+
+#[hdk_extern]
+pub fn delete_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()> {
+    let base = linkable_hash_from_node_id(input.src)?;
+
+    let anchor_link_inputs = input
+        .links
+        .clone()
+        .into_iter()
+        .map(|l| match l.node_id {
+            NodeId::Agent(_) => Some(l),
+            _ => None,
+        })
+        .filter_map(|l| l)
+        .collect::<Vec<LinkInput>>();
+
+    let agent_link_inputs = input
+        .links
+        .clone()
+        .into_iter()
+        .map(|l| match l.node_id {
+            NodeId::Agent(_) => Some(l),
+            _ => None,
+        })
+        .filter_map(|l| l)
+        .collect::<Vec<LinkInput>>();
+
+    let thing_link_inputs = input
+        .links
+        .clone()
+        .into_iter()
+        .map(|l| match l.node_id {
+            NodeId::Agent(_) => Some(l),
+            _ => None,
+        })
+        .filter_map(|l| l)
+        .collect::<Vec<LinkInput>>();
+
+    if anchor_link_inputs.len() > 0 {
+        for link_input in anchor_link_inputs {
+            let links_to_anchors = get_links(
+                GetLinksInputBuilder::try_new(base.clone(), LinkTypes::ToAnchor)?.build(),
+            )?;
+            for link in links_to_anchors {
+                let target = linkable_hash_from_node_id(link_input.node_id.clone())?;
+                if target == link.target {
+                    let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                    if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
+                        delete_link(backlink_action_hash)?;
+                    }
+                    delete_link(link.create_link_hash)?;
+                }
+            }
+        }
+    }
+
+    if agent_link_inputs.len() > 0 {
+        for link_input in agent_link_inputs {
+            let links_to_agents = get_links(
+                GetLinksInputBuilder::try_new(base.clone(), LinkTypes::ToAgent)?.build(),
+            )?;
+            for link in links_to_agents {
+                let target = linkable_hash_from_node_id(link_input.node_id.clone())?;
+                if target == link.target {
+                    let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                    if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
+                        delete_link(backlink_action_hash)?;
+                    }
+                    delete_link(link.create_link_hash)?;
+                }
+            }
+        }
+    }
+
+    if thing_link_inputs.len() > 0 {
+        for link_input in thing_link_inputs {
+            let links_to_things = get_links(
+                GetLinksInputBuilder::try_new(base.clone(), LinkTypes::ToThing)?.build(),
+            )?;
+            for link in links_to_things {
+                let target = linkable_hash_from_node_id(link_input.node_id.clone())?;
+                if target == link.target {
+                    let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                    if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
+                        delete_link(backlink_action_hash)?;
+                    }
+                    delete_link(link.create_link_hash)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn create_link_from_node_by_hash(src: AnyLinkableHash, link: LinkInput) -> ExternResult<()> {
+    match link.node_id {
+        NodeId::Agent(agent) => match link.direction {
+            LinkDirection::To => {
+                create_link(
+                    src.clone(),
+                    agent,
+                    LinkTypes::ToAgent,
+                    derive_link_tag(link.tag, None, None)?,
+                )?;
+            }
+            LinkDirection::From => {
+                create_link(
+                    agent,
+                    src.clone(),
+                    LinkTypes::ToThing,
+                    derive_link_tag(link.tag, None, None)?,
+                )?;
+            }
+            LinkDirection::Bidirectional => {
+                let backlink_action_hash = create_link(
+                    agent.clone(),
+                    src.clone(),
+                    LinkTypes::ToThing,
+                    derive_link_tag(link.tag.clone(), None, None)?,
+                )?;
+                create_link(
+                    src.clone(),
+                    agent,
+                    LinkTypes::ToAgent,
+                    derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
+                )?;
+            }
+        },
+        NodeId::Anchor(anchor) => {
+            let path = Path::from(anchor.clone());
+            let path_entry_hash = path.path_entry_hash()?;
+            match link.direction {
+                LinkDirection::To => {
+                    create_link(
+                        src.clone(),
+                        path_entry_hash,
+                        LinkTypes::ToAgent,
+                        derive_link_tag(link.tag, None, Some(anchor))?,
+                    )?;
+                }
+                LinkDirection::From => {
+                    create_link(
+                        path_entry_hash,
+                        src.clone(),
+                        LinkTypes::ToThing,
+                        derive_link_tag(link.tag, None, Some(anchor))?,
+                    )?;
+                }
+                LinkDirection::Bidirectional => {
+                    let backlink_action_hash = create_link(
+                        path_entry_hash.clone(),
+                        src.clone(),
+                        LinkTypes::ToThing,
+                        derive_link_tag(link.tag.clone(), None, Some(anchor.clone()))?,
+                    )?;
+                    create_link(
+                        src.clone(),
+                        path_entry_hash,
+                        LinkTypes::ToAgent,
+                        derive_link_tag(link.tag, Some(backlink_action_hash), Some(anchor))?,
+                    )?;
+                }
+            }
+        }
+        NodeId::Thing(action_hash) => match link.direction {
+            LinkDirection::To => {
+                create_link(
+                    src.clone(),
+                    action_hash,
+                    LinkTypes::ToAgent,
+                    derive_link_tag(link.tag, None, None)?,
+                )?;
+            }
+            LinkDirection::From => {
+                create_link(
+                    action_hash,
+                    src.clone(),
+                    LinkTypes::ToThing,
+                    derive_link_tag(link.tag, None, None)?,
+                )?;
+            }
+            LinkDirection::Bidirectional => {
+                let backlink_action_hash = create_link(
+                    action_hash.clone(),
+                    src.clone(),
+                    LinkTypes::ToThing,
+                    derive_link_tag(link.tag.clone(), None, None)?,
+                )?;
+                create_link(
+                    src.clone(),
+                    action_hash,
+                    LinkTypes::ToAgent,
+                    derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
+                )?;
+            }
+        },
+    }
+    Ok(())
+}
+
+fn linkable_hash_from_node_id(node_id: NodeId) -> ExternResult<AnyLinkableHash> {
+    match node_id {
+        NodeId::Agent(a) => Ok(a.into()),
+        NodeId::Anchor(a) => Ok(Path::from(a).path_entry_hash()?.into()),
+        NodeId::Thing(a) => Ok(a.into()),
+    }
 }
 
 fn derive_link_tag(

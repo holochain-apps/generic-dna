@@ -1,5 +1,4 @@
 pub mod api;
-pub mod thing_to_agents;
 use generic_zome_integrity::*;
 use hdk::prelude::*;
 
