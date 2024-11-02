@@ -1,5 +1,3 @@
-pub mod thing_to_agents;
-pub use thing_to_agents::*;
 pub mod to_agent;
 pub use to_agent::*;
 pub mod to_anchor;
