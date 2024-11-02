@@ -10,7 +10,7 @@ pub enum LinkDirection {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "id")]
 pub enum NodeId {
     Agent(AgentPubKey),
     Anchor(String),
@@ -18,7 +18,7 @@ pub enum NodeId {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "content")]
 pub enum Node {
     Agent(AgentPubKey),
     Anchor(String),
@@ -382,23 +382,15 @@ pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<String>> {
 pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToThing)?.build())?;
-    let get_input: Vec<GetInput> = links
-        .into_iter()
-        .map(|link| {
-            Ok(GetInput::new(
-                link.target
-                    .into_action_hash()
-                    .ok_or(wasm_error!(WasmErrorInner::Guest(
-                        "No action hash associated with link".to_string()
-                    )))?
-                    .into(),
-                GetOptions::default(),
-            ))
-        })
-        .collect::<ExternResult<Vec<GetInput>>>()?;
-
-    let records = HDK.with(|hdk| hdk.borrow().get(get_input))?;
-    Ok(records
+    let mut latest_maybe_things: Vec<Option<Record>> = Vec::new();
+    for link in links {
+        let maybe_thing_id = link.target.into_action_hash();
+        if let Some(thing_id) = maybe_thing_id {
+            let latest_thing = get_latest_thing(thing_id)?;
+            latest_maybe_things.push(latest_thing);
+        }
+    }
+    Ok(latest_maybe_things
         .into_iter()
         .filter_map(|r| r)
         .map(|r| thing_record_to_thing(r).ok())
@@ -407,13 +399,13 @@ pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CreateOrDeleteLinkInput {
+pub struct CreateOrDeleteLinksInput {
     pub src: NodeId,
     pub links: Vec<LinkInput>,
 }
 
 #[hdk_extern]
-pub fn create_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()> {
+pub fn create_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<()> {
     let base: HoloHash<hash_type::AnyLinkable> = linkable_hash_from_node_id(input.src)?;
     for link in input.links {
         create_link_from_node_by_hash(base.clone(), link)?;
@@ -422,7 +414,7 @@ pub fn create_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()
 }
 
 #[hdk_extern]
-pub fn delete_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()> {
+pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<()> {
     let base = linkable_hash_from_node_id(input.src)?;
 
     let anchor_link_inputs = input
