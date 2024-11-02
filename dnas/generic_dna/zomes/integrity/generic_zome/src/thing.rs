@@ -2,13 +2,13 @@ use hdi::prelude::*;
 
 #[derive(Clone, PartialEq)]
 #[hdk_entry_helper]
-pub struct Thing {
+pub struct ThingEntry {
     pub content: String,
 }
 
 pub fn validate_create_thing(
     _action: EntryCreationAction,
-    _thing: Thing,
+    _thing: ThingEntry,
 ) -> ExternResult<ValidateCallbackResult> {
     /// TODO: add the appropriate validation rules
     Ok(ValidateCallbackResult::Valid)
@@ -16,9 +16,9 @@ pub fn validate_create_thing(
 
 pub fn validate_update_thing(
     _action: Update,
-    _thing: Thing,
+    _thing: ThingEntry,
     _original_action: EntryCreationAction,
-    _original_thing: Thing,
+    _original_thing: ThingEntry,
 ) -> ExternResult<ValidateCallbackResult> {
     /// TODO: add the appropriate validation rules
     Ok(ValidateCallbackResult::Valid)
@@ -27,7 +27,7 @@ pub fn validate_update_thing(
 pub fn validate_delete_thing(
     _action: Delete,
     _original_action: EntryCreationAction,
-    _original_thing: Thing,
+    _original_thing: ThingEntry,
 ) -> ExternResult<ValidateCallbackResult> {
     /// TODO: add the appropriate validation rules
     Ok(ValidateCallbackResult::Valid)
@@ -46,7 +46,7 @@ pub fn validate_create_link_thing_updates(
             "No action hash associated with link".to_string()
         )))?;
     let record = must_get_valid_record(action_hash)?;
-    let _thing: crate::Thing = record
+    let _thing: crate::ThingEntry = record
         .entry()
         .to_app_option()
         .map_err(|e| wasm_error!(e))?
@@ -61,7 +61,7 @@ pub fn validate_create_link_thing_updates(
                 "No action hash associated with link".to_string()
             )))?;
     let record = must_get_valid_record(action_hash)?;
-    let _thing: crate::Thing = record
+    let _thing: crate::ThingEntry = record
         .entry()
         .to_app_option()
         .map_err(|e| wasm_error!(e))?

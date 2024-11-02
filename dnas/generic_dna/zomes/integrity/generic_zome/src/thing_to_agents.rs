@@ -13,7 +13,7 @@ pub fn validate_create_link_thing_to_agents(
             "No action hash associated with link".to_string()
         )))?;
     let record = must_get_valid_record(action_hash)?;
-    let _thing: crate::Thing = record
+    let _thing: crate::ThingEntry = record
         .entry()
         .to_app_option()
         .map_err(|e| wasm_error!(e))?

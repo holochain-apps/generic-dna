@@ -6,6 +6,8 @@ pub mod to_anchor;
 pub use to_anchor::*;
 pub mod to_thing;
 pub use to_thing::*;
+pub mod link_tag_content;
+pub use link_tag_content::*;
 pub mod thing;
 use hdi::prelude::*;
 
@@ -16,7 +18,7 @@ pub use thing::*;
 #[hdk_entry_types]
 #[unit_enum(UnitEntryTypes)]
 pub enum EntryTypes {
-    Thing(Thing),
+    Thing(ThingEntry),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -97,7 +99,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
                     EntryTypes::Thing(thing) => {
                         let original_app_entry =
                             must_get_valid_record(action.clone().original_action_address)?;
-                        let original_thing = match Thing::try_from(original_app_entry) {
+                        let original_thing = match ThingEntry::try_from(original_app_entry) {
                             Ok(entry) => entry,
                             Err(e) => {
                                 return Ok(ValidateCallbackResult::Invalid(format!(
@@ -253,7 +255,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
                                 thing.clone(),
                             )?;
                             if let ValidateCallbackResult::Valid = result {
-                                let original_thing: Option<Thing> = original_record
+                                let original_thing: Option<ThingEntry> = original_record
                                     .entry()
                                     .to_app_option()
                                     .map_err(|e| wasm_error!(e))?;
