@@ -465,8 +465,8 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()
             )?;
             for link in links_to_anchors {
                 let target = linkable_hash_from_node_id(link_input.node_id.clone())?;
-                if target == link.target {
-                    let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                if target == link.target && link_input.tag == link_tag_content.tag {
                     if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                         delete_link(backlink_action_hash)?;
                     }
@@ -483,8 +483,8 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()
             )?;
             for link in links_to_agents {
                 let target = linkable_hash_from_node_id(link_input.node_id.clone())?;
-                if target == link.target {
-                    let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                if target == link.target && link_input.tag == link_tag_content.tag {
                     if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                         delete_link(backlink_action_hash)?;
                     }
@@ -501,8 +501,8 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinkInput) -> ExternResult<()
             )?;
             for link in links_to_things {
                 let target = linkable_hash_from_node_id(link_input.node_id.clone())?;
-                if target == link.target {
-                    let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                let link_tag_content = deserialize_link_tag(link.tag.0)?;
+                if target == link.target && link_input.tag == link_tag_content.tag {
                     if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                         delete_link(backlink_action_hash)?;
                     }
