@@ -1,0 +1,20 @@
+[profile.dev]
+opt-level = "z"
+
+[profile.release]
+opt-level = "z"
+
+[workspace]
+members = ["dnas/*/zomes/coordinator/*", "dnas/*/zomes/integrity/*"]
+resolver = "2"
+
+[workspace.dependencies]
+hdi = "=0.6.0-dev.1"
+hdk = "=0.5.0-dev.3"
+serde = "1.0"
+
+[workspace.dependencies.generic_zome]
+path = "dnas/generic_dna/zomes/coordinator/generic_zome"
+
+[workspace.dependencies.generic_zome_integrity]
+path = "dnas/generic_dna/zomes/integrity/generic_zome"
