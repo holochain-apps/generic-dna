@@ -1,5 +1,14 @@
+pub mod thing_to_agents;
+pub use thing_to_agents::*;
+pub mod to_agent;
+pub use to_agent::*;
+pub mod to_anchor;
+pub use to_anchor::*;
+pub mod to_thing;
+pub use to_thing::*;
 pub mod thing;
 use hdi::prelude::*;
+
 pub use thing::*;
 
 #[derive(Serialize, Deserialize)]
@@ -14,6 +23,9 @@ pub enum EntryTypes {
 #[hdk_link_types]
 pub enum LinkTypes {
     ThingUpdates,
+    ToThing,
+    ToAgent,
+    ToAnchor,
 }
 
 // Validation you perform during the genesis process. Nobody else on the network performs it, only you.
@@ -49,7 +61,7 @@ pub fn validate_agent_joining(
 // - If the `Op` is a delete link, the original action exists and is a `CreateLink` action
 // - Link tags don't exceed the maximum tag size (currently 1KB)
 // - Countersigned entries include an action from each required signer
-// You can read more about validation here: http// ocs.rs/hdi/latest/hdi/index.html#data-validation
+// You can read more about validation here: htt// ocs.rs/hdi/latest/hdi/index.html#data-validation
 #[hdk_extern]
 pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
     match op.flattened::<EntryTypes, LinkTypes>()? {
@@ -156,6 +168,15 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
             LinkTypes::ThingUpdates => {
                 validate_create_link_thing_updates(action, base_address, target_address, tag)
             }
+            LinkTypes::ToAgent => {
+                validate_create_link_to_agent(action, base_address, target_address, tag)
+            }
+            LinkTypes::ToAnchor => {
+                validate_create_link_to_anchor(action, base_address, target_address, tag)
+            }
+            LinkTypes::ToThing => {
+                validate_create_link_to_thing(action, base_address, target_address, tag)
+            }
         },
         FlatOp::RegisterDeleteLink {
             link_type,
@@ -166,6 +187,27 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
             action,
         } => match link_type {
             LinkTypes::ThingUpdates => validate_delete_link_thing_updates(
+                action,
+                original_action,
+                base_address,
+                target_address,
+                tag,
+            ),
+            LinkTypes::ToAgent => validate_delete_link_to_agent(
+                action,
+                original_action,
+                base_address,
+                target_address,
+                tag,
+            ),
+            LinkTypes::ToAnchor => validate_delete_link_to_anchor(
+                action,
+                original_action,
+                base_address,
+                target_address,
+                tag,
+            ),
+            LinkTypes::ToThing => validate_delete_link_to_thing(
                 action,
                 original_action,
                 base_address,
@@ -309,6 +351,15 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
                         target_address,
                         tag,
                     ),
+                    LinkTypes::ToAgent => {
+                        validate_create_link_to_agent(action, base_address, target_address, tag)
+                    }
+                    LinkTypes::ToAnchor => {
+                        validate_create_link_to_anchor(action, base_address, target_address, tag)
+                    }
+                    LinkTypes::ToThing => {
+                        validate_create_link_to_thing(action, base_address, target_address, tag)
+                    }
                 },
                 // Complementary validation to the `RegisterDeleteLink` Op, in which the record itself is validated
                 // If you want to optimize performance, you can remove the validation for an entry type here and keep it in `RegisterDeleteLink`
@@ -339,6 +390,27 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
                     };
                     match link_type {
                         LinkTypes::ThingUpdates => validate_delete_link_thing_updates(
+                            action,
+                            create_link.clone(),
+                            base_address,
+                            create_link.target_address,
+                            create_link.tag,
+                        ),
+                        LinkTypes::ToAgent => validate_delete_link_to_agent(
+                            action,
+                            create_link.clone(),
+                            base_address,
+                            create_link.target_address,
+                            create_link.tag,
+                        ),
+                        LinkTypes::ToAnchor => validate_delete_link_to_anchor(
+                            action,
+                            create_link.clone(),
+                            base_address,
+                            create_link.target_address,
+                            create_link.tag,
+                        ),
+                        LinkTypes::ToThing => validate_delete_link_to_thing(
                             action,
                             create_link.clone(),
                             base_address,
