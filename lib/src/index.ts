@@ -22,6 +22,8 @@ import {
   UpdateThingInput,
 } from './types';
 
+export * from './types';
+
 export class SimpleHolochain {
   private client: AppClient;
   private zomeClient: ZomeClient<GenericZomeSignal>;

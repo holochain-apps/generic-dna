@@ -2,6 +2,7 @@
   "name": "generic-dna-dev",
   "private": true,
   "workspaces": [
+    "lib",
     "ui",
     "tests"
   ],
@@ -15,7 +16,8 @@
     "launch:tauri": "concurrently \"hc run-local-services --bootstrap-port $BOOTSTRAP_PORT --signal-port $SIGNAL_PORT\" \"echo pass | RUST_LOG=warn hc launch --piped -n $AGENTS workdir/generic-dna.happ --ui-port $UI_PORT network --bootstrap http://127.0.0.1:\"$BOOTSTRAP_PORT\" webrtc ws://127.0.0.1:\"$SIGNAL_PORT\"\"",
     "package": "npm run build:happ && npm run package --workspace ui && hc web-app pack workdir --recursive",
     "build:happ": "npm run build:zomes && hc app pack workdir --recursive",
-    "build:zomes": "cargo build --release --target wasm32-unknown-unknown"
+    "build:zomes": "cargo build --release --target wasm32-unknown-unknown",
+    "build:lib": "npm run build -w lib"
   },
   "devDependencies": {
     "@holochain-playground/cli": "^0.300.1",

@@ -1,8 +1,6 @@
 import {
   ActionHash,
-  ActionHashB64,
   AgentPubKey,
-  AgentPubKeyB64,
   Create,
   CreateLink,
   Delete,

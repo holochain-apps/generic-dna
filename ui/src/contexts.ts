@@ -1,4 +1,4 @@
-import { AppClient } from "@holochain/client";
 import { createContext } from "@lit/context";
+import { SimpleHolochain } from "@holochain/simple-holochain";
 
-export const clientContext = createContext<AppClient>("AppClient");
+export const simpleHolochainContext = createContext<SimpleHolochain>("SimpleHolochain");

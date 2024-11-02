@@ -4,8 +4,9 @@ import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import HolochainLogo from "./assets/holochainLogo.svg";
-import { clientContext } from "./contexts";
+import { simpleHolochainContext } from "./contexts";
 import { sharedStyles } from "./shared-styles";
+import { SimpleHolochain } from "@holochain/simple-holochain";
 
 @customElement("holochain-app")
 export class HolochainApp extends LitElement {
@@ -15,14 +16,14 @@ export class HolochainApp extends LitElement {
   @state()
   error: HolochainError | undefined;
 
-  @provide({ context: clientContext })
+  @provide({ context: simpleHolochainContext })
   @property({ type: Object })
-  client!: AppClient;
+  client!: SimpleHolochain;
 
   async firstUpdated() {
     this.loading = true;
     try {
-      this.client = await AppWebsocket.connect();
+      this.client = await SimpleHolochain.connect();
     } catch (e) {
       this.error = e as HolochainError;
     } finally {
