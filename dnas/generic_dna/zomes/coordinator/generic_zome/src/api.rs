@@ -22,7 +22,7 @@ pub enum NodeId {
 pub enum Node {
     Agent(AgentPubKey),
     Anchor(String),
-    Thing(ThingEntry),
+    Thing(Thing),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -69,7 +69,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                 thing_id.clone(),
                                 agent,
                                 LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, None)?,
+                                derive_link_tag(link.tag, None, None)?,
                             )?;
                         }
                         LinkDirection::From => {
@@ -77,7 +77,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                 agent,
                                 thing_id.clone(),
                                 LinkTypes::ToThing,
-                                derive_link_tag(link.tag, None)?,
+                                derive_link_tag(link.tag, None, None)?,
                             )?;
                         }
                         LinkDirection::Bidirectional => {
@@ -85,18 +85,18 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                 agent.clone(),
                                 thing_id.clone(),
                                 LinkTypes::ToThing,
-                                derive_link_tag(link.tag.clone(), None)?,
+                                derive_link_tag(link.tag.clone(), None, None)?,
                             )?;
                             create_link(
                                 thing_id.clone(),
                                 agent,
                                 LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, Some(backlink_action_hash))?,
+                                derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
                             )?;
                         }
                     },
                     NodeId::Anchor(anchor) => {
-                        let path = Path::from(anchor);
+                        let path = Path::from(anchor.clone());
                         let path_entry_hash = path.path_entry_hash()?;
                         match link.direction {
                             LinkDirection::To => {
@@ -104,7 +104,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                     thing_id.clone(),
                                     path_entry_hash,
                                     LinkTypes::ToAgent,
-                                    derive_link_tag(link.tag, None)?,
+                                    derive_link_tag(link.tag, None, Some(anchor))?,
                                 )?;
                             }
                             LinkDirection::From => {
@@ -112,7 +112,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                     path_entry_hash,
                                     thing_id.clone(),
                                     LinkTypes::ToThing,
-                                    derive_link_tag(link.tag, None)?,
+                                    derive_link_tag(link.tag, None, Some(anchor))?,
                                 )?;
                             }
                             LinkDirection::Bidirectional => {
@@ -120,13 +120,17 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                     path_entry_hash.clone(),
                                     thing_id.clone(),
                                     LinkTypes::ToThing,
-                                    derive_link_tag(link.tag.clone(), None)?,
+                                    derive_link_tag(link.tag.clone(), None, Some(anchor.clone()))?,
                                 )?;
                                 create_link(
                                     thing_id.clone(),
                                     path_entry_hash,
                                     LinkTypes::ToAgent,
-                                    derive_link_tag(link.tag, Some(backlink_action_hash))?,
+                                    derive_link_tag(
+                                        link.tag,
+                                        Some(backlink_action_hash),
+                                        Some(anchor),
+                                    )?,
                                 )?;
                             }
                         }
@@ -137,7 +141,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                 thing_id.clone(),
                                 action_hash,
                                 LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, None)?,
+                                derive_link_tag(link.tag, None, None)?,
                             )?;
                         }
                         LinkDirection::From => {
@@ -145,7 +149,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                 action_hash,
                                 thing_id.clone(),
                                 LinkTypes::ToThing,
-                                derive_link_tag(link.tag, None)?,
+                                derive_link_tag(link.tag, None, None)?,
                             )?;
                         }
                         LinkDirection::Bidirectional => {
@@ -153,13 +157,13 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                                 action_hash.clone(),
                                 thing_id.clone(),
                                 LinkTypes::ToThing,
-                                derive_link_tag(link.tag.clone(), None)?,
+                                derive_link_tag(link.tag.clone(), None, None)?,
                             )?;
                             create_link(
                                 thing_id.clone(),
                                 action_hash,
                                 LinkTypes::ToAgent,
-                                derive_link_tag(link.tag, Some(backlink_action_hash))?,
+                                derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
                             )?;
                         }
                     },
@@ -434,13 +438,101 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
     Ok(())
 }
 
+#[hdk_extern]
+pub fn get_all_linked_nodes(node_id: NodeId) -> ExternResult<Vec<Node>> {
+    let mut linked_nodes: Vec<Node> = Vec::new();
+    let linked_things = get_linked_things(node_id.clone())?;
+    for thing in linked_things {
+        let node = Node::Thing(thing);
+        linked_nodes.push(node);
+    }
+    let linked_anchors = get_linked_anchors(node_id.clone())?;
+    for anchor in linked_anchors {
+        let node = Node::Anchor(anchor);
+        linked_nodes.push(node);
+    }
+    let linked_agents = get_linked_agents(node_id)?;
+    for agent in linked_agents {
+        let node = Node::Agent(agent);
+        linked_nodes.push(node);
+    }
+    Ok(linked_nodes)
+}
+
+#[hdk_extern]
+pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<AgentPubKey>> {
+    let base: AnyLinkableHash = match node_id {
+        NodeId::Agent(a) => a.into(),
+        NodeId::Anchor(a) => Path::from(a).path_entry_hash()?.into(),
+        NodeId::Thing(a) => a.into(),
+    };
+    let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAgent)?.build())?;
+    Ok(links
+        .into_iter()
+        .map(|l| l.target.into_agent_pub_key())
+        .filter_map(|a| a)
+        .collect())
+}
+
+#[hdk_extern]
+pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<String>> {
+    let base: AnyLinkableHash = match node_id {
+        NodeId::Agent(a) => a.into(),
+        NodeId::Anchor(a) => Path::from(a).path_entry_hash()?.into(),
+        NodeId::Thing(a) => a.into(),
+    };
+    let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAnchor)?.build())?;
+
+    Ok(links
+        .into_iter()
+        .map(|l| deserialize_link_tag(l.tag.0).ok())
+        .filter_map(|c| c)
+        .map(|c| c.anchor)
+        .filter_map(|a| a)
+        .collect())
+}
+
+#[hdk_extern]
+pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
+    let base: AnyLinkableHash = match node_id {
+        NodeId::Agent(a) => a.into(),
+        NodeId::Anchor(a) => Path::from(a).path_entry_hash()?.into(),
+        NodeId::Thing(a) => a.into(),
+    };
+    let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToThing)?.build())?;
+    let get_input: Vec<GetInput> = links
+        .into_iter()
+        .map(|link| {
+            Ok(GetInput::new(
+                link.target
+                    .into_action_hash()
+                    .ok_or(wasm_error!(WasmErrorInner::Guest(
+                        "No action hash associated with link".to_string()
+                    )))?
+                    .into(),
+                GetOptions::default(),
+            ))
+        })
+        .collect::<ExternResult<Vec<GetInput>>>()?;
+
+    let records = HDK.with(|hdk| hdk.borrow().get(get_input))?;
+    Ok(records
+        .into_iter()
+        .filter_map(|r| r)
+        .map(|r| thing_record_to_thing(r).ok())
+        .filter_map(|t| t)
+        .collect())
+}
+
 fn derive_link_tag(
     input: Option<Vec<u8>>,
     backlink_action_hash: Option<ActionHash>,
+    anchor: Option<String>,
 ) -> ExternResult<LinkTag> {
     let link_tag_content = LinkTagContent {
         tag: input,
         backlink_action_hash,
+        anchor,
     };
     let serialized_content = serialize_link_tag(link_tag_content)?;
     Ok(LinkTag::from(serialized_content))

@@ -8,6 +8,10 @@ pub struct LinkTagContent {
     // This seems worth it since relationship tags may potentially be
     // used by many many different AssetRelation entries.
     pub backlink_action_hash: Option<ActionHash>,
+    // For links to anchors we store the anchor string as well to be able
+    // to retrieve the anchor string that they're pointing to directly
+    // from the link
+    pub anchor: Option<String>,
 }
 
 pub fn serialize_link_tag(link_tag_content: LinkTagContent) -> ExternResult<Vec<u8>> {
