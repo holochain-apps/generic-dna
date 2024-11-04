@@ -77,26 +77,42 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
     })
 }
 
+/// Gets the latest known version of a Thing
 #[hdk_extern]
-pub fn get_latest_thing(thing_id: ActionHash) -> ExternResult<Option<Record>> {
+pub fn get_latest_thing(thing_id: ActionHash) -> ExternResult<Option<Thing>> {
     let links = get_links(
         GetLinksInputBuilder::try_new(thing_id.clone(), LinkTypes::ThingUpdates)?.build(),
     )?;
-    let latest_link = links
-        .into_iter()
-        .max_by(|link_a, link_b| link_a.timestamp.cmp(&link_b.timestamp));
-    let latest_thing_hash = match latest_link {
-        Some(link) => {
-            link.target
-                .clone()
-                .into_action_hash()
-                .ok_or(wasm_error!(WasmErrorInner::Guest(
-                    "No action hash associated with link".to_string()
-                )))?
+    let thing_record = get_latest_thing_from_links(links)?;
+    match thing_record {
+        Some(r) => Ok(Some(thing_record_to_thing(r)?)),
+        None => Ok(None),
+    }
+}
+
+fn get_latest_thing_from_links(mut links: Vec<Link>) -> ExternResult<Option<Record>> {
+    links.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+    for link in links {
+        if let Some(thing_id) = link.target.into_action_hash() {
+            let maybe_record = get(thing_id, GetOptions::default())?;
+            if let Some(record) = maybe_record {
+                return Ok(Some(record));
+            }
         }
-        None => thing_id.clone(),
-    };
-    get(latest_thing_hash, GetOptions::default())
+    }
+    Ok(None)
+}
+
+/// For a vector of provided thing ids, get all the respective latest known Thing
+#[hdk_extern]
+pub fn get_latest_things(thing_ids: Vec<ActionHash>) -> ExternResult<Vec<Option<Thing>>> {
+    let mut latest_things: Vec<Option<Thing>> = Vec::new();
+    for thing_id in thing_ids {
+        let maybe_thing = get_latest_thing(thing_id)?;
+        latest_things.push(maybe_thing);
+    }
+    Ok(latest_things)
 }
 
 #[hdk_extern]
@@ -334,6 +350,27 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
 }
 
 #[hdk_extern]
+pub fn get_all_linked_node_ids(node_id: NodeId) -> ExternResult<Vec<NodeId>> {
+    let mut linked_node_ids: Vec<NodeId> = Vec::new();
+    let linked_thing_ids = get_linked_thing_ids(node_id.clone())?;
+    for thing_id in linked_thing_ids {
+        let node = NodeId::Thing(thing_id);
+        linked_node_ids.push(node);
+    }
+    let linked_anchors = get_linked_anchors(node_id.clone())?;
+    for anchor in linked_anchors {
+        let node = NodeId::Anchor(anchor);
+        linked_node_ids.push(node);
+    }
+    let linked_agents = get_linked_agents(node_id)?;
+    for agent in linked_agents {
+        let node = NodeId::Agent(agent);
+        linked_node_ids.push(node);
+    }
+    Ok(linked_node_ids)
+}
+
+#[hdk_extern]
 pub fn get_all_linked_nodes(node_id: NodeId) -> ExternResult<Vec<Node>> {
     let mut linked_nodes: Vec<Node> = Vec::new();
     let linked_things = get_linked_things(node_id.clone())?;
@@ -379,10 +416,21 @@ pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<String>> {
 }
 
 #[hdk_extern]
+pub fn get_linked_thing_ids(node_id: NodeId) -> ExternResult<Vec<ActionHash>> {
+    let base = linkable_hash_from_node_id(node_id)?;
+    let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToThing)?.build())?;
+    Ok(links
+        .into_iter()
+        .map(|l| l.target.into_action_hash())
+        .filter_map(|r| r)
+        .collect())
+}
+
+#[hdk_extern]
 pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToThing)?.build())?;
-    let mut latest_maybe_things: Vec<Option<Record>> = Vec::new();
+    let mut latest_maybe_things: Vec<Option<Thing>> = Vec::new();
     for link in links {
         let maybe_thing_id = link.target.into_action_hash();
         if let Some(thing_id) = maybe_thing_id {
@@ -390,12 +438,7 @@ pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
             latest_maybe_things.push(latest_thing);
         }
     }
-    Ok(latest_maybe_things
-        .into_iter()
-        .filter_map(|r| r)
-        .map(|r| thing_record_to_thing(r).ok())
-        .filter_map(|t| t)
-        .collect())
+    Ok(latest_maybe_things.into_iter().filter_map(|r| r).collect())
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
