@@ -46,24 +46,6 @@ pub enum Signal {
         action: SignedActionHashed,
         link_type: LinkTypes,
     },
-    LinkDeleted {
-        action: SignedActionHashed,
-        create_link_action: SignedActionHashed,
-        link_type: LinkTypes,
-    },
-    EntryCreated {
-        action: SignedActionHashed,
-        app_entry: EntryTypes,
-    },
-    EntryUpdated {
-        action: SignedActionHashed,
-        app_entry: EntryTypes,
-        original_app_entry: EntryTypes,
-    },
-    EntryDeleted {
-        action: SignedActionHashed,
-        original_app_entry: EntryTypes,
-    },
 }
 
 /// Whenever an action is committed, we emit a signal to the UI elements to reactively update them
