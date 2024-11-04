@@ -50,29 +50,29 @@ export interface ThingEntry {
  */
 export type NodeId =
   | {
-      type: 'anchor';
+      type: 'Anchor';
       id: string;
     }
   | {
-      type: 'thing';
+      type: 'Thing';
       id: ThingId; // "id" --> original action hash
     }
   | {
-      type: 'agent';
+      type: 'Agent';
       id: AgentPubKey;
     };
 
 export type NodeContent =
   | {
-      type: 'anchor';
+      type: 'Anchor';
       content: string;
     }
   | {
-      type: 'thing';
+      type: 'Thing';
       content: Thing;
     }
   | {
-      type: 'agent';
+      type: 'Agent';
       content: AgentPubKey;
     };
 
@@ -104,7 +104,7 @@ export enum LinkDirection {
 
 export type LinkInput = {
   direction: LinkDirection;
-  nodeId: NodeId;
+  node_id: NodeId;
   tag?: Uint8Array;
 };
 
@@ -121,7 +121,7 @@ export type LinkDirectionRust =
 
 export type LinkInputRust = {
   direction: LinkDirectionRust;
-  nodeId: NodeId;
+  node_id: NodeId;
   tag?: Uint8Array;
 };
 

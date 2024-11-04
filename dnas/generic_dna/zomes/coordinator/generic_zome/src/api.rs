@@ -86,7 +86,13 @@ pub fn get_latest_thing(thing_id: ActionHash) -> ExternResult<Option<Thing>> {
     let thing_record = get_latest_thing_from_links(links)?;
     match thing_record {
         Some(r) => Ok(Some(thing_record_to_thing(r)?)),
-        None => Ok(None),
+        None => {
+            let maybe_original_record = get(thing_id, GetOptions::default())?;
+            match maybe_original_record {
+                Some(r) => Ok(Some(thing_record_to_thing(r)?)),
+                None => Ok(None),
+            }
+        }
     }
 }
 

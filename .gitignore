@@ -9,6 +9,8 @@
 /dist/
 /target/
 /.cargo/
+/lib/dist
+/ui/dist
 
 # package manager
 /**/node_modules/

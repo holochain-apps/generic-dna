@@ -8,6 +8,10 @@ import { simpleHolochainContext } from "./contexts";
 import { sharedStyles } from "./shared-styles";
 import { SimpleHolochain } from "@holochain/simple-holochain";
 
+import './elements/all-posts';
+import './elements/create-post';
+import './elements/post-detail';
+
 @customElement("holochain-app")
 export class HolochainApp extends LitElement {
   @state()
@@ -32,22 +36,12 @@ export class HolochainApp extends LitElement {
   }
 
   render() {
-    if (this.loading) return html`<progress></progress>`;
+    if (this.loading || !this.client) return html`<progress></progress>`;
     return html`
       <div>
         <div>
-          <a href="https://developer.holochain.org/get-started/" target="_blank">
-            <img .src=${HolochainLogo} class="logo holochain" alt="holochain logo" />
-          </a>
-        </div>
-        <h1>Holochain Lit hApp</h1>
-        <div>
-          <div class="card">
-            ${this.loading ? html`<p>connecting...</p>` : ""}
-            ${this.error ? html`<p>${this.error.message}</p>` : html`<p>Client is connected.</p>`}
-          </div>
-          <p>Import scaffolded components into <code>src/holochain-app.ts</code> to use your hApp</p>
-          <p class="read-the-docs">Click on the Holochain logo to learn more</p>
+          <create-post></create-post>
+          <all-posts></all-posts>
         </div>
       </div>
     `;
