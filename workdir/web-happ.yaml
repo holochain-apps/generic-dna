@@ -1,0 +1,6 @@
+manifest_version: '1'
+name: generic-dna
+ui:
+  bundled: '../ui/dist.zip'
+happ_manifest:
+  bundled: './generic-dna.happ'

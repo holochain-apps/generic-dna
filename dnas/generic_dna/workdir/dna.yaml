@@ -1,0 +1,21 @@
+manifest_version: '1'
+name: generic_dna
+integrity:
+  network_seed: null
+  properties: null
+  origin_time: 1730546542842577
+  zomes:
+  - name: generic_zome_integrity
+    hash: null
+    bundled: '../../../target/wasm32-unknown-unknown/release/generic_zome_integrity.wasm'
+    dependencies: null
+    dylib: null
+coordinator:
+  zomes:
+  - name: generic_zome
+    hash: null
+    bundled: '../../../target/wasm32-unknown-unknown/release/generic_zome.wasm'
+    dependencies:
+    - name: generic_zome_integrity
+    dylib: null
+lineage: []

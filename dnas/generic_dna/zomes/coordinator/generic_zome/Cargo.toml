@@ -1,0 +1,13 @@
+[package]
+name = "generic_zome"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "generic_zome"
+
+[dependencies]
+hdk = { workspace = true }
+serde = { workspace = true }
+generic_zome_integrity = { workspace = true }
