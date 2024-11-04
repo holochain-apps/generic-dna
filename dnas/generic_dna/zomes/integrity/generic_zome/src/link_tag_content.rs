@@ -1,5 +1,7 @@
 use hdi::prelude::*;
 
+use crate::NodeId;
+
 #[derive(Serialize, Deserialize, SerializedBytes, Debug)]
 pub struct LinkTagContent {
     pub tag: Option<Vec<u8>>,
@@ -11,7 +13,7 @@ pub struct LinkTagContent {
     // For links to anchors we store the anchor string as well to be able
     // to retrieve the anchor string that they're pointing to directly
     // from the link
-    pub anchor: Option<String>,
+    pub target_node_id: NodeId,
 }
 
 pub fn serialize_link_tag(link_tag_content: LinkTagContent) -> ExternResult<Vec<u8>> {

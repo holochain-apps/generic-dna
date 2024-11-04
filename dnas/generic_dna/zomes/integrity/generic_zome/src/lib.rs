@@ -28,6 +28,14 @@ pub enum LinkTypes {
     ToAnchor,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type", content = "id")]
+pub enum NodeId {
+    Agent(AgentPubKey),
+    Anchor(String),
+    Thing(ActionHash),
+}
+
 // Validation you perform during the genesis process. Nobody else on the network performs it, only you.
 // There *is no* access to network calls in this callback
 #[hdk_extern]

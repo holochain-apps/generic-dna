@@ -1,7 +1,4 @@
-import {
-  ActionHash,
-  HolochainError,
-} from '@holochain/client';
+import { ActionHash, HolochainError } from '@holochain/client';
 import { consume } from '@lit/context';
 import { html, LitElement } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
@@ -9,7 +6,13 @@ import { customElement, property, state } from 'lit/decorators.js';
 import './edit-post';
 
 import { simpleHolochainContext } from '../contexts';
-import { AsyncStatus, LinkDirection, NodeStoreContent, SimpleHolochain, Thing } from '@holochain/simple-holochain';
+import {
+  AsyncStatus,
+  LinkDirection,
+  NodeStoreContent,
+  SimpleHolochain,
+  Thing,
+} from '@holochain/simple-holochain';
 
 @customElement('post-detail')
 export class PostDetail extends LitElement {
@@ -26,7 +29,7 @@ export class PostDetail extends LitElement {
   _editing = false;
 
   @state()
-  nodeContent: AsyncStatus<NodeStoreContent> = { status: "pending" };
+  nodeContent: AsyncStatus<NodeStoreContent> = { status: 'pending' };
 
   @state()
   nodeStoreUnsubscriber: (() => void) | undefined;
@@ -37,13 +40,15 @@ export class PostDetail extends LitElement {
         `The thingHash property is required for the thing-detail element`
       );
     }
-    const nodeStore = this.client.nodeStore({
-      type: "Thing",
-      id: this.thingHash,
-    })
-    this.nodeStoreUnsubscriber = nodeStore.subscribe((val) => {
-      this.nodeContent = val;
-    })
+    this.nodeStoreUnsubscriber = this.client.subscribeToNode(
+      {
+        type: 'Thing',
+        id: this.thingHash,
+      },
+      val => {
+        this.nodeContent = val;
+      }
+    );
   }
 
   disconnectedCallback(): void {
@@ -92,8 +97,12 @@ export class PostDetail extends LitElement {
   }
 
   render() {
-    if (this.nodeContent.status === "error") return html`<div class="alert">Error fetching the Thing: ${this.nodeContent.error}</div>`;
-    if (this.nodeContent.status === "pending") return html`<progress></progress>`;
+    if (this.nodeContent.status === 'error')
+      return html`<div class="alert">
+        Error fetching the Thing: ${this.nodeContent.error}
+      </div>`;
+    if (this.nodeContent.status === 'pending')
+      return html`<progress></progress>`;
     // if (this._editing) {
     //   return html`
     //     <edit-post

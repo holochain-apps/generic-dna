@@ -6,7 +6,12 @@ import './post-detail';
 import './edit-post';
 
 import { simpleHolochainContext } from '../contexts';
-import { AsyncStatus, NodeId, NodeStoreContent, SimpleHolochain } from '@holochain/simple-holochain';
+import {
+  AsyncStatus,
+  NodeId,
+  NodeStoreContent,
+  SimpleHolochain,
+} from '@holochain/simple-holochain';
 
 @customElement('all-posts')
 export class AllPosts extends LitElement {
@@ -14,20 +19,23 @@ export class AllPosts extends LitElement {
   client!: SimpleHolochain;
 
   @state()
-  nodeContent: AsyncStatus<NodeStoreContent> = { status: "pending" };
+  nodeContent: AsyncStatus<NodeStoreContent> = { status: 'pending' };
 
   @state()
   nodeStoreUnsubscriber: (() => void) | undefined;
 
   firstUpdated() {
-    const nodeStore = this.client.nodeStore({
-      type: "Anchor",
-      id: "ALL_POSTS",
-    })
-    this.nodeStoreUnsubscriber = nodeStore.subscribe((val) => {
-      console.log("Got new wal: ", val);
-      this.nodeContent = val;
-    })
+    this.nodeStoreUnsubscriber = this.client.subscribeToNode(
+      {
+        type: 'Anchor',
+        id: 'ALL_POSTS',
+      },
+      val => {
+        console.log('Got new wal: ', val);
+        this.nodeContent = val;
+        this.requestUpdate();
+      }
+    );
   }
 
   disconnectedCallback(): void {
@@ -35,16 +43,20 @@ export class AllPosts extends LitElement {
   }
 
   renderNodes(nodeIds: NodeId[]) {
-    const thingNodes = nodeIds.filter((nodeId) => nodeId.type === "Thing");
-    console.log("Rendering thingNodes: ", thingNodes);
-    return thingNodes.map((node) => html`
-    <post-detail .thingHash=${node.id}></post-detail>
-    `)
+    const thingNodes = nodeIds.filter(nodeId => nodeId.type === 'Thing');
+    console.log('Rendering thingNodes: ', thingNodes);
+    return thingNodes.map(
+      node => html` <post-detail .thingHash=${node.id}></post-detail> `
+    );
   }
 
   render() {
-    if (this.nodeContent.status === "error") return html`<div class="alert">Error fetching the thing: ${this.nodeContent.error}</div>`;
-    if (this.nodeContent.status === "pending") return html`<progress></progress>`;
+    if (this.nodeContent.status === 'error')
+      return html`<div class="alert">
+        Error fetching the thing: ${this.nodeContent.error}
+      </div>`;
+    if (this.nodeContent.status === 'pending')
+      return html`<progress></progress>`;
     return this.renderNodes(this.nodeContent.value.linkedNodeIds);
   }
 }

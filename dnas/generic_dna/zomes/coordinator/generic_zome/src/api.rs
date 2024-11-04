@@ -1,3 +1,4 @@
+use crate::{NodeLink, Signal, Thing};
 use generic_zome_integrity::*;
 use hdk::prelude::*;
 
@@ -7,14 +8,6 @@ pub enum LinkDirection {
     From,
     To,
     Bidirectional,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type", content = "id")]
-pub enum NodeId {
-    Agent(AgentPubKey),
-    Anchor(String),
-    Thing(ActionHash),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -30,15 +23,6 @@ pub struct LinkInput {
     pub direction: LinkDirection,
     pub node_id: NodeId,
     pub tag: Option<Vec<u8>>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Thing {
-    pub id: ActionHash,
-    pub content: String,
-    pub creator: AgentPubKey,
-    pub created_at: Timestamp,
-    pub updated_at: Option<Timestamp>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -58,23 +42,47 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
         WasmErrorInner::Guest("Failed to get record that was just created.".into())
     ))?;
 
+    let mut links_created: Vec<NodeLink> = Vec::new();
+
     // 2. Create all links as necessary
-    match input.links {
+    match input.links.clone() {
         Some(links) => {
             for link in links {
-                create_link_from_node_by_hash(thing_id.clone().into(), link)?;
+                create_link_from_node_by_id(NodeId::Thing(thing_id.clone()), link.clone())?;
+                links_created.push(NodeLink {
+                    src: NodeId::Thing(thing_id.clone()),
+                    dst: link.node_id.clone(),
+                });
+                if let LinkDirection::Bidirectional = link.direction {
+                    links_created.push(NodeLink {
+                        src: link.node_id,
+                        dst: NodeId::Thing(thing_id.clone()),
+                    });
+                }
             }
         }
         None => (),
     }
 
-    Ok(Thing {
+    let thing = Thing {
         id: thing_id,
         content: input.content,
         creator: thing_record.action().author().clone(),
         created_at: thing_record.action().timestamp(),
         updated_at: None,
-    })
+    };
+
+    // 3. Emit signals to the frontend
+    emit_signal(Signal::ThingCreated {
+        thing: thing.clone(),
+    })?;
+    if let Some(_) = input.links.clone() {
+        emit_signal(Signal::LinksCreated {
+            links: links_created,
+        })?;
+    }
+
+    Ok(thing)
 }
 
 /// Gets the latest known version of a Thing
@@ -196,13 +204,20 @@ pub fn update_thing(input: UpdateThingInput) -> ExternResult<Thing> {
         (),
     )?;
 
-    Ok(Thing {
+    let thing = Thing {
         id: input.thing_id,
         content: input.updated_content,
         creator: thing_record.action().author().clone(),
         created_at: thing_record.action().timestamp(),
         updated_at: Some(updated_thing_record.action().timestamp()),
-    })
+    };
+
+    // 3. Emit signals to the frontend
+    emit_signal(Signal::ThingUpdated {
+        thing: thing.clone(),
+    })?;
+
+    Ok(thing)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -225,6 +240,8 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
         }
     };
 
+    let mut links_deleted: Vec<NodeLink> = Vec::new();
+
     // 1. Delete the original Thing entry (don't care about updates as they are anyway
     // not retreivable without the original Thing entry)
     delete_entry(input.thing_id.clone())?;
@@ -238,6 +255,10 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
             let link_tag_content = deserialize_link_tag(link.tag.0)?;
             if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                 delete_link(backlink_action_hash)?;
+                links_deleted.push(NodeLink {
+                    src: link_tag_content.target_node_id,
+                    dst: NodeId::Thing(input.thing_id.clone()),
+                });
             }
         }
         let links_to_things = get_links(
@@ -247,6 +268,10 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
             let link_tag_content = deserialize_link_tag(link.tag.0)?;
             if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                 delete_link(backlink_action_hash)?;
+                links_deleted.push(NodeLink {
+                    src: link_tag_content.target_node_id,
+                    dst: NodeId::Thing(input.thing_id.clone()),
+                });
             }
         }
         let links_to_anchors = get_links(
@@ -256,22 +281,26 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
             let link_tag_content = deserialize_link_tag(link.tag.0)?;
             if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                 delete_link(backlink_action_hash)?;
+                links_deleted.push(NodeLink {
+                    src: link_tag_content.target_node_id,
+                    dst: NodeId::Thing(input.thing_id.clone()),
+                });
             }
         }
     }
 
     // 3. Delete all links from the creator to the Thing
     if input.delete_links_from_creator {
-        let links_from_creator = get_links(
-            GetLinksInputBuilder::try_new(
-                thing_record.action().author().clone(),
-                LinkTypes::ToAgent,
-            )?
-            .build(),
-        )?;
+        let creator = thing_record.action().author();
+        let links_from_creator =
+            get_links(GetLinksInputBuilder::try_new(creator.clone(), LinkTypes::ToAgent)?.build())?;
         for link in links_from_creator {
             if link.target == input.thing_id.clone().into() {
                 delete_link(link.create_link_hash)?;
+                links_deleted.push(NodeLink {
+                    src: NodeId::Agent(creator.clone()),
+                    dst: NodeId::Thing(input.thing_id.clone()),
+                });
             }
         }
     }
@@ -325,32 +354,54 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
                     match link_to_delete.node_id {
                         NodeId::Agent(agent) => {
                             delete_links_for_base_with_target(
-                                agent.into(),
+                                agent.clone().into(),
                                 input.thing_id.clone().into(),
                                 LinkTypes::ToThing,
                             )?;
+                            // If multiple links got deleted with the same base and target we assume that
+                            // they get deduplicated in the frontend anyway so we only push it once
+                            links_deleted.push(NodeLink {
+                                src: NodeId::Agent(agent),
+                                dst: NodeId::Thing(input.thing_id.clone()),
+                            });
                         }
                         NodeId::Anchor(anchor) => {
-                            let path = Path::from(anchor);
+                            let path = Path::from(anchor.clone());
                             let path_entry_hash = path.path_entry_hash()?;
                             delete_links_for_base_with_target(
                                 path_entry_hash.into(),
                                 input.thing_id.clone().into(),
                                 LinkTypes::ToThing,
                             )?;
+                            links_deleted.push(NodeLink {
+                                src: NodeId::Anchor(anchor),
+                                dst: NodeId::Thing(input.thing_id.clone()),
+                            });
                         }
                         NodeId::Thing(action_hash) => {
                             delete_links_for_base_with_target(
-                                action_hash.into(),
+                                action_hash.clone().into(),
                                 input.thing_id.clone().into(),
                                 LinkTypes::ToThing,
                             )?;
+                            links_deleted.push(NodeLink {
+                                src: NodeId::Thing(action_hash),
+                                dst: NodeId::Thing(input.thing_id.clone()),
+                            });
                         }
                     }
                 }
             }
         }
     }
+
+    // 4. Emit signals to the frontend
+    emit_signal(Signal::ThingDeleted {
+        id: input.thing_id.clone(),
+    })?;
+    emit_signal(Signal::LinksDeleted {
+        links: links_deleted,
+    })?;
 
     Ok(())
 }
@@ -416,7 +467,7 @@ pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<String>> {
         .into_iter()
         .map(|l| deserialize_link_tag(l.tag.0).ok())
         .filter_map(|c| c)
-        .map(|c| c.anchor)
+        .map(|c| anchor_string_from_node_id(c.target_node_id))
         .filter_map(|a| a)
         .collect())
 }
@@ -455,16 +506,31 @@ pub struct CreateOrDeleteLinksInput {
 
 #[hdk_extern]
 pub fn create_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<()> {
-    let base: HoloHash<hash_type::AnyLinkable> = linkable_hash_from_node_id(input.src)?;
+    let mut links_created: Vec<NodeLink> = Vec::new();
     for link in input.links {
-        create_link_from_node_by_hash(base.clone(), link)?;
+        create_link_from_node_by_id(input.src.clone(), link.clone())?;
+        links_created.push(NodeLink {
+            src: input.src.clone(),
+            dst: link.node_id.clone(),
+        });
+        if let LinkDirection::Bidirectional = link.direction {
+            links_created.push(NodeLink {
+                src: link.node_id,
+                dst: input.src.clone(),
+            });
+        }
     }
+    emit_signal(Signal::LinksCreated {
+        links: links_created,
+    })?;
     Ok(())
 }
 
 #[hdk_extern]
 pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<()> {
-    let base = linkable_hash_from_node_id(input.src)?;
+    let base = linkable_hash_from_node_id(input.src.clone())?;
+
+    let mut links_deleted: Vec<NodeLink> = Vec::new();
 
     let anchor_link_inputs = input
         .links
@@ -510,8 +576,16 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
                 if target == link.target && link_input.tag == link_tag_content.tag {
                     if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                         delete_link(backlink_action_hash)?;
+                        links_deleted.push(NodeLink {
+                            src: link_tag_content.target_node_id,
+                            dst: input.src.clone(),
+                        });
                     }
                     delete_link(link.create_link_hash)?;
+                    links_deleted.push(NodeLink {
+                        src: input.src.clone(),
+                        dst: link_input.node_id.clone(),
+                    });
                 }
             }
         }
@@ -528,8 +602,16 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
                 if target == link.target && link_input.tag == link_tag_content.tag {
                     if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                         delete_link(backlink_action_hash)?;
+                        links_deleted.push(NodeLink {
+                            src: link_tag_content.target_node_id,
+                            dst: input.src.clone(),
+                        });
                     }
                     delete_link(link.create_link_hash)?;
+                    links_deleted.push(NodeLink {
+                        src: input.src.clone(),
+                        dst: link_input.node_id.clone(),
+                    });
                 }
             }
         }
@@ -546,46 +628,61 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
                 if target == link.target && link_input.tag == link_tag_content.tag {
                     if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
                         delete_link(backlink_action_hash)?;
+                        links_deleted.push(NodeLink {
+                            src: link_tag_content.target_node_id,
+                            dst: input.src.clone(),
+                        });
                     }
                     delete_link(link.create_link_hash)?;
+                    links_deleted.push(NodeLink {
+                        src: input.src.clone(),
+                        dst: link_input.node_id.clone(),
+                    });
                 }
             }
         }
     }
+
+    // Emit signals about deleted links to the frontend
+    emit_signal(Signal::LinksCreated {
+        links: links_deleted,
+    })?;
+
     Ok(())
 }
 
-fn create_link_from_node_by_hash(src: AnyLinkableHash, link: LinkInput) -> ExternResult<()> {
-    match link.node_id {
+fn create_link_from_node_by_id(src: NodeId, link: LinkInput) -> ExternResult<()> {
+    let base: HoloHash<hash_type::AnyLinkable> = linkable_hash_from_node_id(src.clone())?;
+    match link.node_id.clone() {
         NodeId::Agent(agent) => match link.direction {
             LinkDirection::To => {
                 create_link(
-                    src.clone(),
+                    base.clone(),
                     agent,
                     LinkTypes::ToAgent,
-                    derive_link_tag(link.tag, None, None)?,
+                    derive_link_tag(link.tag, None, link.node_id.clone())?,
                 )?;
             }
             LinkDirection::From => {
                 create_link(
                     agent,
-                    src.clone(),
+                    base.clone(),
                     LinkTypes::ToThing,
-                    derive_link_tag(link.tag, None, None)?,
+                    derive_link_tag(link.tag, None, link.node_id.clone())?,
                 )?;
             }
             LinkDirection::Bidirectional => {
                 let backlink_action_hash = create_link(
                     agent.clone(),
-                    src.clone(),
+                    base.clone(),
                     LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, None)?,
+                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
                 )?;
                 create_link(
-                    src.clone(),
+                    base.clone(),
                     agent,
                     LinkTypes::ToAgent,
-                    derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
+                    derive_link_tag(link.tag, Some(backlink_action_hash), src.clone())?,
                 )?;
             }
         },
@@ -595,32 +692,32 @@ fn create_link_from_node_by_hash(src: AnyLinkableHash, link: LinkInput) -> Exter
             match link.direction {
                 LinkDirection::To => {
                     create_link(
-                        src.clone(),
+                        base.clone(),
                         path_entry_hash,
                         LinkTypes::ToAgent,
-                        derive_link_tag(link.tag, None, Some(anchor))?,
+                        derive_link_tag(link.tag, None, link.node_id.clone())?,
                     )?;
                 }
                 LinkDirection::From => {
                     create_link(
                         path_entry_hash,
-                        src.clone(),
+                        base.clone(),
                         LinkTypes::ToThing,
-                        derive_link_tag(link.tag, None, Some(anchor))?,
+                        derive_link_tag(link.tag, None, link.node_id.clone())?,
                     )?;
                 }
                 LinkDirection::Bidirectional => {
                     let backlink_action_hash = create_link(
                         path_entry_hash.clone(),
-                        src.clone(),
+                        base.clone(),
                         LinkTypes::ToThing,
-                        derive_link_tag(link.tag.clone(), None, Some(anchor.clone()))?,
+                        derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
                     )?;
                     create_link(
-                        src.clone(),
+                        base.clone(),
                         path_entry_hash,
                         LinkTypes::ToAgent,
-                        derive_link_tag(link.tag, Some(backlink_action_hash), Some(anchor))?,
+                        derive_link_tag(link.tag, Some(backlink_action_hash), src.clone())?,
                     )?;
                 }
             }
@@ -628,32 +725,32 @@ fn create_link_from_node_by_hash(src: AnyLinkableHash, link: LinkInput) -> Exter
         NodeId::Thing(action_hash) => match link.direction {
             LinkDirection::To => {
                 create_link(
-                    src.clone(),
+                    base.clone(),
                     action_hash,
                     LinkTypes::ToAgent,
-                    derive_link_tag(link.tag, None, None)?,
+                    derive_link_tag(link.tag, None, link.node_id.clone())?,
                 )?;
             }
             LinkDirection::From => {
                 create_link(
                     action_hash,
-                    src.clone(),
+                    base.clone(),
                     LinkTypes::ToThing,
-                    derive_link_tag(link.tag, None, None)?,
+                    derive_link_tag(link.tag, None, link.node_id.clone())?,
                 )?;
             }
             LinkDirection::Bidirectional => {
                 let backlink_action_hash = create_link(
                     action_hash.clone(),
-                    src.clone(),
+                    base.clone(),
                     LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, None)?,
+                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
                 )?;
                 create_link(
-                    src.clone(),
+                    base.clone(),
                     action_hash,
                     LinkTypes::ToAgent,
-                    derive_link_tag(link.tag, Some(backlink_action_hash), None)?,
+                    derive_link_tag(link.tag, Some(backlink_action_hash), src.clone())?,
                 )?;
             }
         },
@@ -672,12 +769,12 @@ fn linkable_hash_from_node_id(node_id: NodeId) -> ExternResult<AnyLinkableHash> 
 fn derive_link_tag(
     input: Option<Vec<u8>>,
     backlink_action_hash: Option<ActionHash>,
-    anchor: Option<String>,
+    target_node_id: NodeId,
 ) -> ExternResult<LinkTag> {
     let link_tag_content = LinkTagContent {
         tag: input,
         backlink_action_hash,
-        anchor,
+        target_node_id,
     };
     let serialized_content = serialize_link_tag(link_tag_content)?;
     Ok(LinkTag::from(serialized_content))
@@ -726,4 +823,11 @@ fn thing_record_to_thing(record: Record) -> ExternResult<Thing> {
         created_at: record.action().timestamp(),
         updated_at: None,
     })
+}
+
+fn anchor_string_from_node_id(node_id: NodeId) -> Option<String> {
+    match node_id {
+        NodeId::Anchor(s) => Some(s),
+        _ => None,
+    }
 }

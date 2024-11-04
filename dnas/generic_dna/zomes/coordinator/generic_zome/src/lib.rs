@@ -8,10 +8,40 @@ pub fn init() -> ExternResult<InitCallbackResult> {
     Ok(InitCallbackResult::Pass)
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NodeLink {
+    src: NodeId,
+    dst: NodeId,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Thing {
+    pub id: ActionHash,
+    pub content: String,
+    pub creator: AgentPubKey,
+    pub created_at: Timestamp,
+    pub updated_at: Option<Timestamp>,
+}
+
 /// Don't modify this enum if you want the scaffolding tool to generate appropriate signals for your entries and links
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum Signal {
+    ThingCreated {
+        thing: Thing,
+    },
+    ThingUpdated {
+        thing: Thing,
+    },
+    ThingDeleted {
+        id: ActionHash,
+    },
+    LinksCreated {
+        links: Vec<NodeLink>,
+    },
+    LinksDeleted {
+        links: Vec<NodeLink>,
+    },
     LinkCreated {
         action: SignedActionHashed,
         link_type: LinkTypes,

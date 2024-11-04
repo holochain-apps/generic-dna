@@ -29,6 +29,7 @@ export * from "./types";
 
 import {
   derived,
+  get,
   Readable,
   Unsubscriber,
   Writable,
@@ -47,11 +48,12 @@ export type AsyncStatus<T> =
 
 const DEFAULT_POLLING_FREQUENCY = 10000;
 export class NodeStore {
-  client: SimpleHolochain;
-  nodeId: NodeId;
+  private client: SimpleHolochain;
+  private nodeId: NodeId;
 
   private subscribers: number[] = [];
-  private nodeStore: Writable<AsyncStatus<NodeStoreContent>> = writable({
+
+  nodeStore: Writable<AsyncStatus<NodeStoreContent>> = writable({
     status: "pending",
   });
 
@@ -98,16 +100,22 @@ export class NodeStore {
     );
 
     let linkedNodeIds = await this.client.getAllLinkedNodeIds(this.nodeId);
+    console.log("@pollStore: Linked node ids: ", linkedNodeIds);
 
     if (this.nodeId.type === "Thing") {
       const latestThing = await this.client.getThing(this.nodeId.id);
       if (!latestThing) {
-        this.nodeStore.set({
-          status: "error",
-          error: `Failed to get Thing record for thing with id ${encodeHashToBase64(
-            this.nodeId.id
-          )}`,
-        });
+        const currentThing = get(this.nodeStore);
+        // If it is already complete, we assume that the Thing arrived through emit_signal
+        // otherwise we set it to "error"
+        if (currentThing.status !== "complete") {
+          this.nodeStore.set({
+            status: "error",
+            error: `Failed to get Thing record for thing with id ${encodeHashToBase64(
+              this.nodeId.id
+            )}`,
+          });
+        }
         return;
       }
       const content: NodeContent = {
@@ -182,6 +190,89 @@ export class SimpleHolochain {
     this.roleName = roleName;
     this.zomeName = zomeName;
     // TODO set up signal listener. Potentially emit signal to conductor
+    this.zomeClient.onSignal(async (signal) => {
+      switch (signal.type) {
+        case "ThingCreated": {
+          // ignore since things are probably mostly discovered through anchors and then the thing will be polled
+          const nodeStore = this.nodeStore({
+            type: "Thing",
+            id: signal.thing.id,
+          });
+          nodeStore.nodeStore.update((content) => {
+            if (content.status === "complete") {
+              content.value.content.content = signal.thing;
+              return content;
+            }
+            return {
+              status: "complete",
+              value: {
+                content: { type: "Thing", content: signal.thing },
+                linkedNodeIds: [],
+              },
+            };
+          });
+          break;
+        }
+        case "ThingUpdated": {
+          const nodeStore = this.nodeStore({
+            type: "Thing",
+            id: signal.thing.id,
+          });
+          nodeStore.nodeStore.update((content) => {
+            if (content.status === "complete") {
+              content.value.content.content = signal.thing;
+              return content;
+            }
+            return {
+              status: "complete",
+              value: {
+                content: { type: "Thing", content: signal.thing },
+                linkedNodeIds: [],
+              },
+            };
+          });
+          break;
+        }
+        case "ThingDeleted": {
+          break;
+        }
+        case "LinksCreated": {
+          console.log("Got LINKS_CREATED SIGNAL!!");
+
+          signal.links.forEach(({ src, dst }) => {
+            const nodeStore = this.nodeStore(src);
+            nodeStore.nodeStore.update((store) => {
+              if (store.status === "complete") {
+                const currentLinkedNodeIds = store.value.linkedNodeIds;
+                const nodeExists = currentLinkedNodeIds.find((nodeId) =>
+                  areNodesEqual(dst, nodeId)
+                );
+                if (nodeExists) return store;
+                currentLinkedNodeIds.push(dst);
+                store.value.linkedNodeIds = currentLinkedNodeIds;
+              }
+              return store;
+            });
+          });
+          break;
+        }
+        case "LinksDeleted": {
+          signal.links.forEach(({ src, dst }) => {
+            const nodeStore = this.nodeStore(src);
+            nodeStore.nodeStore.update((store) => {
+              if (store.status === "complete") {
+                const currentLinkedNodeIds = store.value.linkedNodeIds;
+                store.value.linkedNodeIds = currentLinkedNodeIds.filter(
+                  (nodeId) => !areNodesEqual(dst, nodeId)
+                );
+              }
+              return store;
+            });
+          });
+          break;
+        }
+      }
+    });
   }
 
   static async connect(options: AppWebsocketConnectionOptions = {}) {
@@ -194,7 +285,7 @@ export class SimpleHolochain {
     return new SimpleHolochain(client, zomeClient);
   }
 
-  nodeStore(nodeId: NodeId): NodeStore {
+  private nodeStore(nodeId: NodeId): NodeStore {
     switch (nodeId.type) {
       case "Agent": {
         const agentId = encodeHashToBase64(nodeId.id);
@@ -217,6 +308,14 @@ export class SimpleHolochain {
         return this.thingStores[thingId];
       }
     }
+  }
+
+  subscribeToNode(
+    nodeId: NodeId,
+    cb: (value: AsyncStatus<NodeStoreContent>) => any
+  ): Unsubscriber {
+    const nodeStore = this.nodeStore(nodeId);
+    return nodeStore.subscribe(cb);
   }
 
   /**
@@ -419,4 +518,15 @@ function linkInputToRustFormat(linkInput: LinkInput): LinkInputRust {
     node_id: linkInput.node_id,
     tag: linkInput.tag,
   };
+}
+
+function areNodesEqual(nodeId_a: NodeId, nodeId_b: NodeId): boolean {
+  if (nodeId_a.type !== nodeId_b.type) return false;
+  if (nodeId_a.type === "Agent" && nodeId_b.type === "Agent")
+    return encodeHashToBase64(nodeId_a.id) === encodeHashToBase64(nodeId_b.id);
+  if (nodeId_a.type === "Thing" && nodeId_b.type === "Thing")
+    return encodeHashToBase64(nodeId_a.id) === encodeHashToBase64(nodeId_b.id);
+  if (nodeId_a.type === "Anchor" && nodeId_b.type === "Anchor")
+    return nodeId_a.id === nodeId_b.id;
+  return false;
 }

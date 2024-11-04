@@ -7,42 +7,67 @@ import {
   DeleteLink,
   SignedActionHashed,
   Update,
-} from '@holochain/client';
+} from "@holochain/client";
 
 export type GenericZomeSignal =
   | {
-      type: 'EntryCreated';
+      type: "ThingCreated";
+      thing: Thing;
+    }
+  | {
+      type: "ThingUpdated";
+      thing: Thing;
+    }
+  | {
+      type: "ThingDeleted";
+      id: ActionHash;
+    }
+  | {
+      type: "LinksCreated";
+      links: NodeLink[];
+    }
+  | {
+      type: "LinksDeleted";
+      links: NodeLink[];
+    }
+  | {
+      type: "EntryCreated";
       action: SignedActionHashed<Create>;
       app_entry: EntryTypes;
     }
   | {
-      type: 'EntryUpdated';
+      type: "EntryUpdated";
       action: SignedActionHashed<Update>;
       app_entry: EntryTypes;
       original_app_entry: EntryTypes;
     }
   | {
-      type: 'EntryDeleted';
+      type: "EntryDeleted";
       action: SignedActionHashed<Delete>;
       original_app_entry: EntryTypes;
     }
   | {
-      type: 'LinkCreated';
+      type: "LinkCreated";
       action: SignedActionHashed<CreateLink>;
       link_type: string;
     }
   | {
-      type: 'LinkDeleted';
+      type: "LinkDeleted";
       action: SignedActionHashed<DeleteLink>;
       link_type: string;
     };
 
 /* dprint-ignore-start */
-export type EntryTypes = { type: 'Thing' } & ThingEntry;
+export type EntryTypes = { type: "Thing" } & ThingEntry;
 /* dprint-ignore-end */
 
 export interface ThingEntry {
   content: string;
+}
+
+export type NodeLink = {
+  src: NodeId,
+  dst: NodeId,
 }
 
 /**
@@ -50,29 +75,29 @@ export interface ThingEntry {
  */
 export type NodeId =
   | {
-      type: 'Anchor';
+      type: "Anchor";
       id: string;
     }
   | {
-      type: 'Thing';
+      type: "Thing";
       id: ThingId; // "id" --> original action hash
     }
   | {
-      type: 'Agent';
+      type: "Agent";
       id: AgentPubKey;
     };
 
 export type NodeContent =
   | {
-      type: 'Anchor';
+      type: "Anchor";
       content: string;
     }
   | {
-      type: 'Thing';
+      type: "Thing";
       content: Thing;
     }
   | {
-      type: 'Agent';
+      type: "Agent";
       content: AgentPubKey;
     };
 
@@ -110,13 +135,13 @@ export type LinkInput = {
 
 export type LinkDirectionRust =
   | {
-      type: 'From';
+      type: "From";
     }
   | {
-      type: 'To';
+      type: "To";
     }
   | {
-      type: 'Bidirectional';
+      type: "Bidirectional";
     };
 
 export type LinkInputRust = {
@@ -136,13 +161,13 @@ export type UpdateThingInput = {
 };
 
 export type DeleteThingInput = {
-  thing_id: ActionHash,
-  delete_backlinks: boolean,
-  delete_links_from_creator: boolean,
-  delete_links?: LinkInputRust[],
-}
+  thing_id: ActionHash;
+  delete_backlinks: boolean;
+  delete_links_from_creator: boolean;
+  delete_links?: LinkInputRust[];
+};
 
 export type CreateOrDeleteLinksInput = {
-  src: NodeId,
-  links: LinkInputRust[],
+  src: NodeId;
+  links: LinkInputRust[];
 };
