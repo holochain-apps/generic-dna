@@ -1,4 +1,4 @@
-use crate::{NodeLink, Signal, Thing};
+use crate::{NodeLink, Signal, SignalKind, Thing};
 use generic_zome_integrity::*;
 use hdk::prelude::*;
 
@@ -73,13 +73,13 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
     };
 
     // 3. Emit signals to the frontend
-    emit_signal(Signal::ThingCreated {
+    emit_signal(Signal::Local(SignalKind::ThingCreated {
         thing: thing.clone(),
-    })?;
+    }))?;
     if let Some(_) = input.links.clone() {
-        emit_signal(Signal::LinksCreated {
+        emit_signal(Signal::Local(SignalKind::LinksCreated {
             links: links_created,
-        })?;
+        }))?;
     }
 
     Ok(thing)
@@ -213,9 +213,9 @@ pub fn update_thing(input: UpdateThingInput) -> ExternResult<Thing> {
     };
 
     // 3. Emit signals to the frontend
-    emit_signal(Signal::ThingUpdated {
+    emit_signal(Signal::Local(SignalKind::ThingUpdated {
         thing: thing.clone(),
-    })?;
+    }))?;
 
     Ok(thing)
 }
@@ -396,12 +396,12 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
     }
 
     // 4. Emit signals to the frontend
-    emit_signal(Signal::ThingDeleted {
+    emit_signal(Signal::Local(SignalKind::ThingDeleted {
         id: input.thing_id.clone(),
-    })?;
-    emit_signal(Signal::LinksDeleted {
+    }))?;
+    emit_signal(Signal::Local(SignalKind::LinksDeleted {
         links: links_deleted,
-    })?;
+    }))?;
 
     Ok(())
 }
@@ -520,9 +520,9 @@ pub fn create_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
             });
         }
     }
-    emit_signal(Signal::LinksCreated {
+    emit_signal(Signal::Local(SignalKind::LinksCreated {
         links: links_created,
-    })?;
+    }))?;
     Ok(())
 }
 
@@ -644,9 +644,9 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
     }
 
     // Emit signals about deleted links to the frontend
-    emit_signal(Signal::LinksCreated {
+    emit_signal(Signal::Local(SignalKind::LinksCreated {
         links: links_deleted,
-    })?;
+    }))?;
 
     Ok(())
 }

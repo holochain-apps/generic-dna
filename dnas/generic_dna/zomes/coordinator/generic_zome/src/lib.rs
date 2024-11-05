@@ -5,6 +5,18 @@ use hdk::prelude::*;
 /// Called the first time a zome call is made to the cell containing this zome
 #[hdk_extern]
 pub fn init() -> ExternResult<InitCallbackResult> {
+    let mut functions = BTreeSet::new();
+    functions.insert((zome_info()?.name, FunctionName("recv_remote_signal".into())));
+    let cap_grant_entry: CapGrantEntry = CapGrantEntry::new(
+        String::from("remote signals"), // A string by which to later query for saved grants.
+        ().into(), // Unrestricted access means any external agent can call the extern
+        GrantedFunctions::Listed(functions),
+    );
+
+    create_cap_grant(cap_grant_entry)?;
+
+    // register own public key on global anchor
+    add_agent_to_anchor(())?;
     Ok(InitCallbackResult::Pass)
 }
 
@@ -23,15 +35,69 @@ pub struct Thing {
     pub updated_at: Option<Timestamp>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type", content = "content")]
+pub enum Signal {
+    Local(SignalKind),
+    Remote(SignalKind),
+}
+
 /// Don't modify this enum if you want the scaffolding tool to generate appropriate signals for your entries and links
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
-pub enum Signal {
+pub enum SignalKind {
     ThingCreated { thing: Thing },
     ThingUpdated { thing: Thing },
     ThingDeleted { id: ActionHash },
     LinksCreated { links: Vec<NodeLink> },
     LinksDeleted { links: Vec<NodeLink> },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RemoteSignal {
+    signal: Signal,
+}
+
+#[hdk_extern]
+pub fn recv_remote_signal(signal: ExternIO) -> ExternResult<()> {
+    let signal_payload: Signal = signal.decode().map_err(|err| {
+        wasm_error!(WasmErrorInner::Guest(format!(
+            "Failed to deserialize remote signal payload: {}",
+            err
+        )))
+    })?;
+
+    emit_signal(signal_payload)?;
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RemoteSignalInput {
+    pub signal: Signal,
+    pub agents: Vec<AgentPubKey>,
+}
+
+#[hdk_extern]
+pub fn remote_signal(input: RemoteSignalInput) -> ExternResult<()> {
+    if let Signal::Remote(_) = input.signal {
+        let encoded_signal = ExternIO::encode(input.signal)
+            .map_err(|err| wasm_error!(WasmErrorInner::Guest(err.into())))?;
+        send_remote_signal(encoded_signal, input.agents)?;
+    }
+    Ok(())
+}
+
+pub const SIMPLE_HOLOCHAIN_ALL_AGENTS: &str = "SIMPLE_HOLOCHAIN_ALL_AGENTS";
+
+#[hdk_extern]
+pub fn add_agent_to_anchor(_: ()) -> ExternResult<ActionHash> {
+    let path = Path::from(SIMPLE_HOLOCHAIN_ALL_AGENTS);
+    create_link(
+        path.path_entry_hash()?,
+        agent_info()?.agent_initial_pubkey,
+        LinkTypes::ToAgent,
+        (),
+    )
 }
 
 // /// Whenever an action is committed, we emit a signal to the UI elements to reactively update them

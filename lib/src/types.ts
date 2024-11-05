@@ -11,6 +11,16 @@ import {
 
 export type GenericZomeSignal =
   | {
+      type: "Local";
+      content: SignalKind;
+    }
+  | {
+      type: "Remote";
+      content: SignalKind;
+    };
+
+export type SignalKind =
+  | {
       type: "ThingCreated";
       thing: Thing;
     }
@@ -57,6 +67,12 @@ export type GenericZomeSignal =
       link_type: string;
     };
 
+
+export type RemoteSignalInput = {
+  signal: GenericZomeSignal,
+  agents: AgentPubKey[],
+}
+
 /* dprint-ignore-start */
 export type EntryTypes = { type: "Thing" } & ThingEntry;
 /* dprint-ignore-end */
@@ -66,9 +82,9 @@ export interface ThingEntry {
 }
 
 export type NodeLink = {
-  src: NodeId,
-  dst: NodeId,
-}
+  src: NodeId;
+  dst: NodeId;
+};
 
 /**
  * A node in the graph can be of three distinct types, identified in different ways

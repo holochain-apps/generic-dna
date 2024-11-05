@@ -20,6 +20,7 @@ import {
   LinkInputRust,
   NodeContent,
   NodeId,
+  RemoteSignalInput,
   Thing,
   ThingId,
   UpdateThingInput,
@@ -179,6 +180,10 @@ export class SimpleHolochain {
   private agentStores: Record<AgentPubKeyB64, NodeStore> = {};
   private thingStores: Record<ActionHashB64, NodeStore> = {};
 
+  private allAgentsUnsubscriber: Unsubscriber | undefined;
+
+  private allAgents: AgentPubKey[] = [];
+
   private constructor(
     client: AppClient,
     zomeClient: ZomeClient<GenericZomeSignal>,
@@ -189,8 +194,21 @@ export class SimpleHolochain {
     this.zomeClient = zomeClient;
     this.roleName = roleName;
     this.zomeName = zomeName;
+
+    const allAgentsNodeStore = this.nodeStore({ type: "Anchor", id: "SIMPLE_HOLOCHAIN_ALL_AGENTS"});
+    this.allAgentsUnsubscriber = allAgentsNodeStore.subscribe((val) => {
+      if (val.status === "complete" && val.value.content.type === "Anchor") {
+        this.allAgents = val.value.linkedNodeIds.filter((nodeId) => nodeId.type === "Agent").map((nodeId) => nodeId.id);
+        console.log("GOT AGENTS: ", this.allAgents.map((a) => encodeHashToBase64(a)));
+      }
+    })
+
     // TODO set up signal listener. Potentially emit signal to conductor
-    this.zomeClient.onSignal(async (signal) => {
+    this.zomeClient.onSignal(async (s) => {
+      if (s.type === "Remote") {
+        console.log("Got remote signal!");
+      }
+      let signal = s.content;
       switch (signal.type) {
         case "ThingCreated": {
           // ignore since things are probably mostly discovered through anchors and then the thing will be polled
@@ -272,6 +290,16 @@ export class SimpleHolochain {
           break;
         }
       }
+      if (s.type === "Local") {
+        const input: RemoteSignalInput = {
+          signal: {
+            type: "Remote",
+            content: signal,
+          },
+          agents: this.allAgents,
+        }
+        await this.callZome('remote_signal', input)
+      }
     });
   }
 
@@ -309,6 +337,7 @@ export class SimpleHolochain {
       }
     }
   }
+
 
   subscribeToNode(
     nodeId: NodeId,
