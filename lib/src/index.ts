@@ -301,14 +301,23 @@ export class SimpleHolochain {
     });
   }
 
-  static async connect(options: AppWebsocketConnectionOptions = {}) {
-    const client = await AppWebsocket.connect(options);
+  /**
+   *
+   * @param appClient (optional) An AppClient with an already established app websocket connection
+   * @param options (optional) If no AppClient is provided, this argument allows to specify
+   * the websocket connection options
+   * @returns
+   */
+  static async connect(appClient?: AppClient, options: AppWebsocketConnectionOptions = {}) {
+    if (!appClient) {
+      appClient = await AppWebsocket.connect(options);
+    }
     const zomeClient = new ZomeClient<GenericZomeSignal>(
-      client,
+      appClient,
       "generic_dna",
       "generic_zome"
     );
-    return new SimpleHolochain(client, zomeClient);
+    return new SimpleHolochain(appClient, zomeClient);
   }
 
   private nodeStore(nodeId: NodeId): NodeStore {

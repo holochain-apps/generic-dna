@@ -9,6 +9,7 @@
   "scripts": {
     "start": "AGENTS=${AGENTS:-2} BOOTSTRAP_PORT=$(get-port) SIGNAL_PORT=$(get-port) npm run network",
     "network": "hc sandbox clean && npm run build:happ && UI_PORT=$(get-port) concurrently \"npm run start --workspace ui\" \"npm run launch:happ\"",
+    "tool-dev": "npm run build:happ && concurrently \"UI_PORT=8888 npm run start --workspace ui\" \"weave --agent-idx 1 --dev-config ./weave.dev.config.ts\" \"sleep 5 && weave --agent-idx 2 --dev-config ./weave.dev.config.ts --sync-time 6000\"",
     "test": "npm run build:zomes && hc app pack workdir --recursive && npm run test --workspace tests",
     "launch:happ": "hc-spin -n $AGENTS --ui-port $UI_PORT workdir/generic-dna.happ",
     "start:tauri": "AGENTS=${AGENTS:-2} BOOTSTRAP_PORT=$(get-port) SIGNAL_PORT=$(get-port) npm run network:tauri",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@holochain-playground/cli": "^0.300.1",
     "@holochain/hc-spin": "^0.400.0-dev.3",
+    "@theweave/cli": "0.13.0-gamma.6",
     "concurrently": "^6.5.1",
     "get-port-cli": "^3.0.0"
   },
