@@ -43,7 +43,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: 'workdir/group.happ'
+          artifacts: 'workdir/generic-dna.happ'
           body: 'See assets below to download and install this version.'
           name: simple-holochain-happ v${{ steps.version.outputs.APP_VERSION }}-hdk-${{ steps.version.outputs.HDK_VERSION }}
           tag: simple-holochain-happ-v${{ steps.version.outputs.APP_VERSION }}
