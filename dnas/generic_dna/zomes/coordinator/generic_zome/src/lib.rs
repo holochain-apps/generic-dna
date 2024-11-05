@@ -24,6 +24,7 @@ pub fn init() -> ExternResult<InitCallbackResult> {
 pub struct NodeLink {
     src: NodeId,
     dst: NodeId,
+    tag: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

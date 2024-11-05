@@ -84,6 +84,7 @@ export interface ThingEntry {
 export type NodeLink = {
   src: NodeId;
   dst: NodeId;
+  tag: Uint8Array | undefined;
 };
 
 /**

@@ -17,7 +17,7 @@ import {
 @customElement('post-detail')
 export class PostDetail extends LitElement {
   @consume({ context: simpleHolochainContext })
-  client!: SimpleHolochain;
+  simpleHolochain!: SimpleHolochain;
 
   @property({
     hasChanged: (newVal: ActionHash, oldVal: ActionHash) =>
@@ -40,7 +40,7 @@ export class PostDetail extends LitElement {
         `The thingHash property is required for the thing-detail element`
       );
     }
-    this.nodeStoreUnsubscriber = this.client.subscribeToNode(
+    this.nodeStoreUnsubscriber = this.simpleHolochain.subscribeToNode(
       {
         type: 'Thing',
         id: this.thingHash,
@@ -57,7 +57,7 @@ export class PostDetail extends LitElement {
 
   async deleteThing() {
     try {
-      await this.client.deleteThing(this.thingHash, true, true, [
+      await this.simpleHolochain.deleteThing(this.thingHash, true, true, [
         {
           direction: LinkDirection.From,
           node_id: {

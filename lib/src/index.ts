@@ -180,8 +180,6 @@ export class SimpleHolochain {
   private agentStores: Record<AgentPubKeyB64, NodeStore> = {};
   private thingStores: Record<ActionHashB64, NodeStore> = {};
 
-  private allAgentsUnsubscriber: Unsubscriber | undefined;
-
   private allAgents: AgentPubKey[] = [];
 
   private constructor(
@@ -196,7 +194,7 @@ export class SimpleHolochain {
     this.zomeName = zomeName;
 
     const allAgentsNodeStore = this.nodeStore({ type: "Anchor", id: "SIMPLE_HOLOCHAIN_ALL_AGENTS"});
-    this.allAgentsUnsubscriber = allAgentsNodeStore.subscribe((val) => {
+    allAgentsNodeStore.subscribe((val) => {
       if (val.status === "complete" && val.value.content.type === "Anchor") {
         this.allAgents = val.value.linkedNodeIds.filter((nodeId) => nodeId.type === "Agent").map((nodeId) => nodeId.id);
         console.log("GOT AGENTS: ", this.allAgents.map((a) => encodeHashToBase64(a)));

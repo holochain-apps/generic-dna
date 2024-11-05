@@ -52,11 +52,13 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
                 links_created.push(NodeLink {
                     src: NodeId::Thing(thing_id.clone()),
                     dst: link.node_id.clone(),
+                    tag: link.tag.clone(),
                 });
                 if let LinkDirection::Bidirectional = link.direction {
                     links_created.push(NodeLink {
                         src: link.node_id,
                         dst: NodeId::Thing(thing_id.clone()),
+                        tag: link.tag.clone(),
                     });
                 }
             }
@@ -258,6 +260,7 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
                 links_deleted.push(NodeLink {
                     src: link_tag_content.target_node_id,
                     dst: NodeId::Thing(input.thing_id.clone()),
+                    tag: link_tag_content.tag,
                 });
             }
         }
@@ -271,6 +274,7 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
                 links_deleted.push(NodeLink {
                     src: link_tag_content.target_node_id,
                     dst: NodeId::Thing(input.thing_id.clone()),
+                    tag: link_tag_content.tag,
                 });
             }
         }
@@ -284,6 +288,7 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
                 links_deleted.push(NodeLink {
                     src: link_tag_content.target_node_id,
                     dst: NodeId::Thing(input.thing_id.clone()),
+                    tag: link_tag_content.tag,
                 });
             }
         }
@@ -295,11 +300,13 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
         let links_from_creator =
             get_links(GetLinksInputBuilder::try_new(creator.clone(), LinkTypes::ToAgent)?.build())?;
         for link in links_from_creator {
+            let link_tag_content = deserialize_link_tag(link.tag.0)?;
             if link.target == input.thing_id.clone().into() {
                 delete_link(link.create_link_hash)?;
                 links_deleted.push(NodeLink {
                     src: NodeId::Agent(creator.clone()),
                     dst: NodeId::Thing(input.thing_id.clone()),
+                    tag: link_tag_content.tag,
                 });
             }
         }
@@ -363,6 +370,7 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
                             links_deleted.push(NodeLink {
                                 src: NodeId::Agent(agent),
                                 dst: NodeId::Thing(input.thing_id.clone()),
+                                tag: link_to_delete.tag,
                             });
                         }
                         NodeId::Anchor(anchor) => {
@@ -376,6 +384,7 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
                             links_deleted.push(NodeLink {
                                 src: NodeId::Anchor(anchor),
                                 dst: NodeId::Thing(input.thing_id.clone()),
+                                tag: link_to_delete.tag,
                             });
                         }
                         NodeId::Thing(action_hash) => {
@@ -387,6 +396,7 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
                             links_deleted.push(NodeLink {
                                 src: NodeId::Thing(action_hash),
                                 dst: NodeId::Thing(input.thing_id.clone()),
+                                tag: link_to_delete.tag,
                             });
                         }
                     }
@@ -512,11 +522,13 @@ pub fn create_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
         links_created.push(NodeLink {
             src: input.src.clone(),
             dst: link.node_id.clone(),
+            tag: link.tag.clone(),
         });
         if let LinkDirection::Bidirectional = link.direction {
             links_created.push(NodeLink {
                 src: link.node_id,
                 dst: input.src.clone(),
+                tag: link.tag,
             });
         }
     }
@@ -579,12 +591,14 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
                         links_deleted.push(NodeLink {
                             src: link_tag_content.target_node_id,
                             dst: input.src.clone(),
+                            tag: link_tag_content.tag,
                         });
                     }
                     delete_link(link.create_link_hash)?;
                     links_deleted.push(NodeLink {
                         src: input.src.clone(),
                         dst: link_input.node_id.clone(),
+                        tag: link_input.tag.clone(),
                     });
                 }
             }
@@ -605,12 +619,14 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
                         links_deleted.push(NodeLink {
                             src: link_tag_content.target_node_id,
                             dst: input.src.clone(),
+                            tag: link_tag_content.tag,
                         });
                     }
                     delete_link(link.create_link_hash)?;
                     links_deleted.push(NodeLink {
                         src: input.src.clone(),
                         dst: link_input.node_id.clone(),
+                        tag: link_input.tag.clone(),
                     });
                 }
             }
@@ -631,12 +647,14 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
                         links_deleted.push(NodeLink {
                             src: link_tag_content.target_node_id,
                             dst: input.src.clone(),
+                            tag: link_tag_content.tag,
                         });
                     }
                     delete_link(link.create_link_hash)?;
                     links_deleted.push(NodeLink {
                         src: input.src.clone(),
                         dst: link_input.node_id.clone(),
+                        tag: link_input.tag.clone(),
                     });
                 }
             }

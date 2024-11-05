@@ -16,7 +16,7 @@ import {
 @customElement('all-posts')
 export class AllPosts extends LitElement {
   @consume({ context: simpleHolochainContext })
-  client!: SimpleHolochain;
+  simpleHolochain!: SimpleHolochain;
 
   @state()
   nodeContent: AsyncStatus<NodeStoreContent> = { status: 'pending' };
@@ -25,13 +25,12 @@ export class AllPosts extends LitElement {
   nodeStoreUnsubscriber: (() => void) | undefined;
 
   firstUpdated() {
-    this.nodeStoreUnsubscriber = this.client.subscribeToNode(
+    this.nodeStoreUnsubscriber = this.simpleHolochain.subscribeToNode(
       {
         type: 'Anchor',
         id: 'ALL_POSTS',
       },
       val => {
-        console.log('Got new wal: ', val);
         this.nodeContent = val;
         this.requestUpdate();
       }
