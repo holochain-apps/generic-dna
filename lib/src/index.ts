@@ -23,8 +23,10 @@ import {
   NodeAndLinkedIds,
   NodeContent,
   NodeId,
+  NodeIdAndTag,
   NodeLink,
   RemoteSignalInput,
+  Tag,
   Thing,
   ThingId,
   UpdateThingInput,
@@ -50,7 +52,7 @@ declare global {
 
 export type NodeStoreContent = {
   content: NodeContent;
-  linkedNodeIds: NodeId[];
+  linkedNodeIds: NodeIdAndTag[];
 };
 
 export type AsyncStatus<T> =
@@ -207,8 +209,8 @@ export class SimpleHolochain {
     allAgentsNodeStore.subscribe((val) => {
       if (val.status === "complete" && val.value.content.type === "Anchor") {
         this.allAgents = val.value.linkedNodeIds
-          .filter((nodeId) => nodeId.type === "Agent")
-          .map((nodeId) => nodeId.id);
+          .filter((nodeIdAndTag) => nodeIdAndTag.node_id.type === "Agent")
+          .map((nodeIdAndTag) => nodeIdAndTag.node_id.id) as AgentPubKey[];
         console.log(
           "GOT AGENTS: ",
           this.allAgents.map((a) => encodeHashToBase64(a))
@@ -283,16 +285,16 @@ export class SimpleHolochain {
         case "LinksCreated": {
           console.log("Got LINKS_CREATED SIGNAL!!");
 
-          signal.links.forEach(({ src, dst }) => {
+          signal.links.forEach(({ src, dst, tag }) => {
             const nodeStore = this.nodeStore(src);
             nodeStore.nodeStore.update((store) => {
               if (store.status === "complete") {
                 const currentLinkedNodeIds = store.value.linkedNodeIds;
-                const nodeExists = currentLinkedNodeIds.find((nodeId) =>
-                  areNodesEqual(dst, nodeId)
+                const nodeExists = currentLinkedNodeIds.find((nodeIdAndTag) =>
+                  areNodeAndTagEqual({ node_id: dst, tag }, nodeIdAndTag)
                 );
                 if (nodeExists) return store;
-                currentLinkedNodeIds.push(dst);
+                currentLinkedNodeIds.push({ node_id: dst, tag });
                 store.value.linkedNodeIds = currentLinkedNodeIds;
               }
               return store;
@@ -308,13 +310,13 @@ export class SimpleHolochain {
           break;
         }
         case "LinksDeleted": {
-          signal.links.forEach(({ src, dst }) => {
+          signal.links.forEach(({ src, dst, tag }) => {
             const nodeStore = this.nodeStore(src);
             nodeStore.nodeStore.update((store) => {
               if (store.status === "complete") {
                 const currentLinkedNodeIds = store.value.linkedNodeIds;
                 store.value.linkedNodeIds = currentLinkedNodeIds.filter(
-                  (nodeId) => !areNodesEqual(dst, nodeId)
+                  (nodeIdAndTag) => !areNodeAndTagEqual({ node_id: dst, tag }, nodeIdAndTag)
                 );
               }
               return store;
@@ -431,13 +433,13 @@ export class SimpleHolochain {
               });
             } else {
               nodeStore.nodeStore.update((store) => {
-                let newLinkedNodeIds: NodeId[] = [];
+                let newLinkedNodeIds: NodeIdAndTag[] = [];
                 if (store.status === "complete") {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
-                nodeAndLinkedIds.linked_node_ids.forEach((nodeId) => {
-                  if (!containsNodeId(newLinkedNodeIds, nodeId)) {
-                    newLinkedNodeIds.push(nodeId);
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndTag) => {
+                  if (!containsNodeIdAndTag(newLinkedNodeIds, nodeIdAndTag)) {
+                    newLinkedNodeIds.push(nodeIdAndTag);
                   }
                 });
                 return {
@@ -474,13 +476,13 @@ export class SimpleHolochain {
               });
             } else {
               nodeStore.nodeStore.update((store) => {
-                let newLinkedNodeIds: NodeId[] = [];
+                let newLinkedNodeIds: NodeIdAndTag[] = [];
                 if (store.status === "complete") {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
-                nodeAndLinkedIds.linked_node_ids.forEach((nodeId) => {
-                  if (!containsNodeId(newLinkedNodeIds, nodeId)) {
-                    newLinkedNodeIds.push(nodeId);
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndTag) => {
+                  if (!containsNodeIdAndTag(newLinkedNodeIds, nodeIdAndTag)) {
+                    newLinkedNodeIds.push(nodeIdAndTag);
                   }
                 });
                 return {
@@ -517,13 +519,13 @@ export class SimpleHolochain {
               });
             } else {
               nodeStore.nodeStore.update((store) => {
-                let newLinkedNodeIds: NodeId[] = [];
+                let newLinkedNodeIds: NodeIdAndTag[] = [];
                 if (store.status === "complete") {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
-                nodeAndLinkedIds.linked_node_ids.forEach((nodeId) => {
-                  if (!containsNodeId(newLinkedNodeIds, nodeId)) {
-                    newLinkedNodeIds.push(nodeId);
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndTag) => {
+                  if (!containsNodeIdAndTag(newLinkedNodeIds, nodeIdAndTag)) {
+                    newLinkedNodeIds.push(nodeIdAndTag);
                   }
                 });
                 return {
@@ -678,7 +680,7 @@ export class SimpleHolochain {
    * @param src
    * @returns
    */
-  async getAllLinkedNodeIds(src: NodeId): Promise<NodeId[]> {
+  async getAllLinkedNodeIds(src: NodeId): Promise<NodeIdAndTag[]> {
     return this.callZome("get_all_linked_node_ids", src);
   }
 
@@ -698,7 +700,9 @@ export class SimpleHolochain {
    * @param src
    * @returns
    */
-  async getLinkedAgents(src: NodeId): Promise<AgentPubKey[]> {
+  async getLinkedAgents(
+    src: NodeId
+  ): Promise<[AgentPubKey, Tag | undefined][]> {
     return this.callZome("get_linked_agents", src);
   }
 
@@ -708,7 +712,7 @@ export class SimpleHolochain {
    * @param src
    * @returns
    */
-  async getLinkedAnchors(src: NodeId): Promise<string[]> {
+  async getLinkedAnchors(src: NodeId): Promise<[string, Tag | undefined][]> {
     return this.callZome("get_linked_anchors", src);
   }
 
@@ -719,7 +723,7 @@ export class SimpleHolochain {
    * @param src
    * @returns
    */
-  async getLinkedThings(src: NodeId): Promise<Thing[]> {
+  async getLinkedThings(src: NodeId): Promise<[Thing, Tag | undefined][]> {
     return this.callZome("get_linked_things", src);
   }
 
@@ -822,11 +826,40 @@ function areNodesEqual(nodeId_a: NodeId, nodeId_b: NodeId): boolean {
   return false;
 }
 
-function containsNodeId(arr: NodeId[], nodeId: NodeId): boolean {
+function areNodeAndTagEqual(
+  nodeId_a: NodeIdAndTag,
+  nodeId_b: NodeIdAndTag
+): boolean {
+  if (nodeId_a.node_id.type !== nodeId_b.node_id.type) return false;
+  if (nodeId_a.node_id.type === "Agent" && nodeId_b.node_id.type === "Agent")
+    return (
+      encodeHashToBase64(nodeId_a.node_id.id) ===
+        encodeHashToBase64(nodeId_b.node_id.id) && areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag)
+    );
+  if (nodeId_a.node_id.type === "Thing" && nodeId_b.node_id.type === "Thing")
+    return (
+      encodeHashToBase64(nodeId_a.node_id.id) ===
+      encodeHashToBase64(nodeId_b.node_id.id) && areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag)
+    );
+  if (nodeId_a.node_id.type === "Anchor" && nodeId_b.node_id.type === "Anchor")
+    return nodeId_a.node_id.id === nodeId_b.node_id.id && areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag);
+  return false;
+}
+
+function containsNodeIdAndTag(
+  arr: NodeIdAndTag[],
+  nodeIdAndTag: NodeIdAndTag
+): boolean {
   for (const id of arr) {
-    if (areNodesEqual(id, nodeId)) {
+    if (areNodeAndTagEqual(id, nodeIdAndTag)) {
       return true;
     }
   }
   return false;
+}
+
+function areUint8ArrayEqual(a, b) {
+  if (a.length != b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] != b[i]) return false;
+  return true;
 }

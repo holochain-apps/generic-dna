@@ -1,9 +1,8 @@
-import { ActionHash, AppClient, AppWebsocket, HolochainError } from "@holochain/client";
+import { HolochainError } from "@holochain/client";
 import { createContext, provide } from "@lit/context";
 import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import HolochainLogo from "./assets/holochainLogo.svg";
 import { simpleHolochainContext } from "./contexts";
 import { sharedStyles } from "./shared-styles";
 import { SimpleHolochain } from "@holochain/simple-holochain";

@@ -69,11 +69,10 @@ export type SignalKind =
       link_type: string;
     };
 
-
 export type RemoteSignalInput = {
-  signal: GenericZomeSignal,
-  agents: AgentPubKey[],
-}
+  signal: GenericZomeSignal;
+  agents: AgentPubKey[];
+};
 
 /* dprint-ignore-start */
 export type EntryTypes = { type: "Thing" } & ThingEntry;
@@ -106,6 +105,13 @@ export type NodeId =
       type: "Agent";
       id: AgentPubKey;
     };
+
+export type NodeIdAndTag = {
+  node_id: NodeId;
+  tag: Tag | undefined;
+};
+
+export type Tag = Uint8Array;
 
 export type NodeContent =
   | {
@@ -193,6 +199,6 @@ export type CreateOrDeleteLinksInput = {
 };
 
 export type NodeAndLinkedIds = {
-  content: NodeContent,
-  linked_node_ids: NodeId[],
-}
+  content: NodeContent;
+  linked_node_ids: NodeIdAndTag[];
+};

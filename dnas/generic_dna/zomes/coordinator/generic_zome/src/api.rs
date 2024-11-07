@@ -19,6 +19,12 @@ pub enum NodeContent {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NodeIdAndTag {
+    node_id: NodeId,
+    tag: Option<Vec<u8>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LinkInput {
     pub direction: LinkDirection,
     pub node_id: NodeId,
@@ -346,22 +352,22 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
 }
 
 #[hdk_extern]
-pub fn get_all_linked_node_ids(node_id: NodeId) -> ExternResult<Vec<NodeId>> {
-    let mut linked_node_ids: Vec<NodeId> = Vec::new();
+pub fn get_all_linked_node_ids(node_id: NodeId) -> ExternResult<Vec<NodeIdAndTag>> {
+    let mut linked_node_ids: Vec<NodeIdAndTag> = Vec::new();
     let linked_thing_ids = get_linked_thing_ids(node_id.clone())?;
-    for thing_id in linked_thing_ids {
+    for (thing_id, tag) in linked_thing_ids {
         let node = NodeId::Thing(thing_id);
-        linked_node_ids.push(node);
+        linked_node_ids.push(NodeIdAndTag { node_id: node, tag });
     }
     let linked_anchors = get_linked_anchors(node_id.clone())?;
-    for anchor in linked_anchors {
+    for (anchor, tag) in linked_anchors {
         let node = NodeId::Anchor(anchor);
-        linked_node_ids.push(node);
+        linked_node_ids.push(NodeIdAndTag { node_id: node, tag });
     }
     let linked_agents = get_linked_agents(node_id)?;
-    for agent in linked_agents {
+    for (agent, tag) in linked_agents {
         let node = NodeId::Agent(agent);
-        linked_node_ids.push(node);
+        linked_node_ids.push(NodeIdAndTag { node_id: node, tag });
     }
     Ok(linked_node_ids)
 }
@@ -375,12 +381,12 @@ pub fn get_all_linked_nodes(node_id: NodeId) -> ExternResult<Vec<NodeContent>> {
         linked_nodes.push(node);
     }
     let linked_anchors = get_linked_anchors(node_id.clone())?;
-    for anchor in linked_anchors {
+    for (anchor, _) in linked_anchors {
         let node = NodeContent::Anchor(anchor);
         linked_nodes.push(node);
     }
     let linked_agents = get_linked_agents(node_id)?;
-    for agent in linked_agents {
+    for (agent, _) in linked_agents {
         let node = NodeContent::Agent(agent);
         linked_nodes.push(node);
     }
@@ -388,37 +394,50 @@ pub fn get_all_linked_nodes(node_id: NodeId) -> ExternResult<Vec<NodeContent>> {
 }
 
 #[hdk_extern]
-pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<AgentPubKey>> {
+pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<(AgentPubKey, Option<Vec<u8>>)>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAgent)?.build())?;
     Ok(links
         .into_iter()
-        .map(|l| l.target.into_agent_pub_key())
-        .filter_map(|a| a)
+        .map(|l| {
+            (
+                l.target.into_agent_pub_key(),
+                deserialize_link_tag(l.tag.0).ok(),
+            )
+        })
+        .filter(|(maybe_agent, maybe_tag)| maybe_agent.is_some() && maybe_tag.is_some())
+        .map(|(agent, tag)| (agent.unwrap(), tag.unwrap().tag))
         .collect())
 }
 
 #[hdk_extern]
-pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<String>> {
+pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<(String, Option<Vec<u8>>)>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAnchor)?.build())?;
     Ok(links
         .into_iter()
-        .map(|l| deserialize_link_tag(l.tag.0).ok())
-        .filter_map(|c| c)
-        .map(|c| anchor_string_from_node_id(c.target_node_id))
-        .filter_map(|a| a)
+        .filter_map(|l| deserialize_link_tag(l.tag.0).ok())
+        .map(|c| (anchor_string_from_node_id(c.target_node_id), c.tag))
+        .filter(|(maybe_anchor, _)| maybe_anchor.is_some())
+        .map(|(anchor, tag)| (anchor.unwrap(), tag))
         .collect())
 }
 
+/// Returns the linked thing ids together with the link tag
 #[hdk_extern]
-pub fn get_linked_thing_ids(node_id: NodeId) -> ExternResult<Vec<ActionHash>> {
+pub fn get_linked_thing_ids(node_id: NodeId) -> ExternResult<Vec<(ActionHash, Option<Vec<u8>>)>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToThing)?.build())?;
     Ok(links
         .into_iter()
-        .map(|l| l.target.into_action_hash())
-        .filter_map(|r| r)
+        .map(|l| {
+            (
+                l.target.into_action_hash(),
+                deserialize_link_tag(l.tag.0).ok(),
+            )
+        })
+        .filter(|(maybe_action, maybe_tag)| maybe_action.is_some() && maybe_tag.is_some())
+        .map(|(action, tag)| (action.unwrap(), tag.unwrap().tag))
         .collect())
 }
 
@@ -440,7 +459,7 @@ pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NodeAndLinkedIds {
     pub content: NodeContent,
-    pub linked_node_ids: Vec<NodeId>,
+    pub linked_node_ids: Vec<NodeIdAndTag>,
 }
 
 #[hdk_extern]
