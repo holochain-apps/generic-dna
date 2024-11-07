@@ -899,33 +899,6 @@ fn derive_link_tag(
     Ok(LinkTag::from(serialized_content))
 }
 
-/// Deletes all links for a base that are pointing to the given target
-fn delete_links_for_base_with_target(
-    base: AnyLinkableHash,
-    target: AnyLinkableHash,
-    link_type: LinkTypes,
-) -> ExternResult<Option<ActionHash>> {
-    let mut action_hash = None;
-    let links = get_links(GetLinksInputBuilder::try_new(base, link_type)?.build())?;
-    for link in links {
-        if link.target == target {
-            action_hash = Some(delete_link(link.create_link_hash)?);
-        }
-    }
-    // We only return a single action hash although multiple action hashes may have been deleted. This
-    // is because we don't care in the frontend whether there were
-    Ok(action_hash)
-}
-
-fn delete_links_with_target(links: &Vec<Link>, target: AnyLinkableHash) -> ExternResult<()> {
-    for link in links {
-        if link.target == target {
-            delete_link(link.create_link_hash.clone())?;
-        }
-    }
-    Ok(())
-}
-
 fn thing_record_to_thing(record: Record) -> ExternResult<Thing> {
     let thing_entry = record
     .entry()

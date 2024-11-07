@@ -10,7 +10,7 @@ pub fn validate_create_thing(
     _action: EntryCreationAction,
     _thing: ThingEntry,
 ) -> ExternResult<ValidateCallbackResult> {
-    /// TODO: add the appropriate validation rules
+    // TODO: add the appropriate validation rules
     Ok(ValidateCallbackResult::Valid)
 }
 
@@ -20,7 +20,7 @@ pub fn validate_update_thing(
     _original_action: EntryCreationAction,
     _original_thing: ThingEntry,
 ) -> ExternResult<ValidateCallbackResult> {
-    /// TODO: add the appropriate validation rules
+    // TODO: add the appropriate validation rules
     Ok(ValidateCallbackResult::Valid)
 }
 
@@ -29,7 +29,7 @@ pub fn validate_delete_thing(
     _original_action: EntryCreationAction,
     _original_thing: ThingEntry,
 ) -> ExternResult<ValidateCallbackResult> {
-    /// TODO: add the appropriate validation rules
+    // TODO: add the appropriate validation rules
     Ok(ValidateCallbackResult::Valid)
 }
 
@@ -39,7 +39,7 @@ pub fn validate_create_link_thing_updates(
     target_address: AnyLinkableHash,
     _tag: LinkTag,
 ) -> ExternResult<ValidateCallbackResult> {
-    /// Check the entry type for the given action hash
+    // Check the entry type for the given action hash
     let action_hash = base_address
         .into_action_hash()
         .ok_or(wasm_error!(WasmErrorInner::Guest(
@@ -53,7 +53,7 @@ pub fn validate_create_link_thing_updates(
         .ok_or(wasm_error!(WasmErrorInner::Guest(
             "Linked action must reference an entry".to_string()
         )))?;
-    /// Check the entry type for the given action hash
+    // Check the entry type for the given action hash
     let action_hash =
         target_address
             .into_action_hash()
