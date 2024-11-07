@@ -46,6 +46,7 @@ export class PostDetail extends LitElement {
         id: this.thingHash,
       },
       val => {
+        console.log("@post-detail: Got new value: ", val);
         this.nodeContent = val;
       }
     );

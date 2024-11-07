@@ -52,7 +52,7 @@ export class HolochainApp extends LitElement {
           !['main'].includes(weaveClient.renderInfo.view.type)
         )
           throw new Error(
-            'This Tool only implements the applet main and asset views.'
+            'This Tool only implements the applet main view.'
           );
         this.simpleHolochain = await SimpleHolochain.connect(weaveClient.renderInfo.appletClient);
       } else {

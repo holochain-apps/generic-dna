@@ -3,11 +3,13 @@ import {
   ActionHashB64,
   AgentPubKey,
   AgentPubKeyB64,
+  AnyDhtHash,
   AppCallZomeRequest,
   AppClient,
   AppWebsocket,
   AppWebsocketConnectionOptions,
   encodeHashToBase64,
+  Record as HolochainRecord,
 } from "@holochain/client";
 import {
   CreateOrDeleteLinksInput,
@@ -18,8 +20,10 @@ import {
   LinkDirectionRust,
   LinkInput,
   LinkInputRust,
+  NodeAndLinkedIds,
   NodeContent,
   NodeId,
+  NodeLink,
   RemoteSignalInput,
   Thing,
   ThingId,
@@ -37,6 +41,13 @@ import {
   writable,
 } from "svelte/store";
 
+declare global {
+  interface Window {
+    __SIMPLE_PEER_POLL_INTERVAL__: number | undefined;
+    __SIMPLE_HOLOCHAIN__: SimpleHolochain;
+  }
+}
+
 export type NodeStoreContent = {
   content: NodeContent;
   linkedNodeIds: NodeId[];
@@ -47,18 +58,17 @@ export type AsyncStatus<T> =
   | { status: "complete"; value: T }
   | { status: "error"; error: any };
 
-const DEFAULT_POLLING_FREQUENCY = 10000;
+const DEFAULT_POLLING_PERIOD = 10000;
+
 export class NodeStore {
   private client: SimpleHolochain;
-  private nodeId: NodeId;
+  public nodeId: NodeId;
 
   private subscribers: number[] = [];
 
   nodeStore: Writable<AsyncStatus<NodeStoreContent>> = writable({
     status: "pending",
   });
-
-  private pollInterval: number | undefined;
 
   constructor(client: SimpleHolochain, nodeId: NodeId) {
     this.client = client;
@@ -70,31 +80,38 @@ export class NodeStore {
   }
 
   subscribe(cb: (value: AsyncStatus<NodeStoreContent>) => any): Unsubscriber {
-    const subscriberId = this.addSubscriber();
+    const firstSubscriber = !this.isSubscribed;
 
-    // TODO listen for signals here
+    const subscriberId = this.addSubscriber();
 
     const unsubscribe = this.nodeStore.subscribe((val) => cb(val));
 
-    if (!this.pollInterval) {
-      this.pollStore();
-      this.pollInterval = window.setInterval(
-        async () => this.pollStore(),
-        DEFAULT_POLLING_FREQUENCY
-      );
+    if (firstSubscriber) {
+      setTimeout(this.pollStore);
     }
 
     return () => {
       console.log("@NodeStore: Unsubscribing...");
       this.removeSubscriber(subscriberId);
-      if (this.subscribers.length === 0 && this.pollInterval) {
-        window.clearInterval(this.pollInterval);
-      }
       unsubscribe();
     };
   }
 
-  async pollStore() {
+  get isSubscribed() {
+    return this.subscribers.length > 0;
+  }
+
+  addSubscriber(): number {
+    let id = Math.max(...this.subscribers) + 1;
+    this.subscribers = [...this.subscribers, id];
+    return id;
+  }
+
+  removeSubscriber(id: number) {
+    this.subscribers = this.subscribers.filter((s) => s != id);
+  }
+
+  pollStore = async () => {
     console.log(
       "Polling in NodeStore. Current subscriber count: ",
       this.subscribers.length
@@ -157,17 +174,7 @@ export class NodeStore {
     } else {
       throw new Error(`Invalid Node type ${(this.nodeId as any).type}`);
     }
-  }
-
-  addSubscriber(): number {
-    let id = Math.max(...this.subscribers) + 1;
-    this.subscribers = [...this.subscribers, id];
-    return id;
-  }
-
-  removeSubscriber(id: number) {
-    this.subscribers = this.subscribers.filter((s) => s != id);
-  }
+  };
 }
 
 export class SimpleHolochain {
@@ -193,13 +200,21 @@ export class SimpleHolochain {
     this.roleName = roleName;
     this.zomeName = zomeName;
 
-    const allAgentsNodeStore = this.nodeStore({ type: "Anchor", id: "SIMPLE_HOLOCHAIN_ALL_AGENTS"});
+    const allAgentsNodeStore = this.nodeStore({
+      type: "Anchor",
+      id: "SIMPLE_HOLOCHAIN_ALL_AGENTS",
+    });
     allAgentsNodeStore.subscribe((val) => {
       if (val.status === "complete" && val.value.content.type === "Anchor") {
-        this.allAgents = val.value.linkedNodeIds.filter((nodeId) => nodeId.type === "Agent").map((nodeId) => nodeId.id);
-        console.log("GOT AGENTS: ", this.allAgents.map((a) => encodeHashToBase64(a)));
+        this.allAgents = val.value.linkedNodeIds
+          .filter((nodeId) => nodeId.type === "Agent")
+          .map((nodeId) => nodeId.id);
+        console.log(
+          "GOT AGENTS: ",
+          this.allAgents.map((a) => encodeHashToBase64(a))
+        );
       }
-    })
+    });
 
     // TODO set up signal listener. Potentially emit signal to conductor
     this.zomeClient.onSignal(async (s) => {
@@ -210,10 +225,11 @@ export class SimpleHolochain {
       switch (signal.type) {
         case "ThingCreated": {
           // ignore since things are probably mostly discovered through anchors and then the thing will be polled
-          const nodeStore = this.nodeStore({
+          const nodeId: NodeId = {
             type: "Thing",
             id: signal.thing.id,
-          });
+          };
+          const nodeStore = this.nodeStore(nodeId);
           nodeStore.nodeStore.update((content) => {
             if (content.status === "complete") {
               content.value.content.content = signal.thing;
@@ -227,13 +243,16 @@ export class SimpleHolochain {
               },
             };
           });
+          // Get the records to make sure they are available in the next polling cycle
+          setTimeout(() => this.getRecords([signal.thing.id]), 100);
           break;
         }
         case "ThingUpdated": {
-          const nodeStore = this.nodeStore({
+          const nodeId: NodeId = {
             type: "Thing",
             id: signal.thing.id,
-          });
+          };
+          const nodeStore = this.nodeStore(nodeId);
           nodeStore.nodeStore.update((content) => {
             if (content.status === "complete") {
               content.value.content.content = signal.thing;
@@ -247,9 +266,18 @@ export class SimpleHolochain {
               },
             };
           });
+          setTimeout(
+            () =>
+              this.getRecords([
+                signal.update_action_hash,
+                signal.update_link_action_hash,
+              ]),
+            100
+          );
           break;
         }
         case "ThingDeleted": {
+          // await this.pollStores(true);
           break;
         }
         case "LinksCreated": {
@@ -270,6 +298,13 @@ export class SimpleHolochain {
               return store;
             });
           });
+          setTimeout(
+            () =>
+              this.getRecords(
+                signal.links.map((link) => link.create_action_hash)
+              ),
+            100
+          );
           break;
         }
         case "LinksDeleted": {
@@ -285,9 +320,11 @@ export class SimpleHolochain {
               return store;
             });
           });
+          await this.pollStores(true);
           break;
         }
       }
+      // If it's a local signal, forward it to all other agents
       if (s.type === "Local") {
         const input: RemoteSignalInput = {
           signal: {
@@ -295,10 +332,15 @@ export class SimpleHolochain {
             content: signal,
           },
           agents: this.allAgents,
-        }
-        await this.callZome('remote_signal', input)
+        };
+        await this.callZome("remote_signal", input);
       }
     });
+    window.__SIMPLE_PEER_POLL_INTERVAL__ = window.setInterval(
+      () => this.pollStores(),
+      DEFAULT_POLLING_PERIOD
+    );
+    setTimeout(() => this.pollStores());
   }
 
   /**
@@ -308,7 +350,12 @@ export class SimpleHolochain {
    * the websocket connection options
    * @returns
    */
-  static async connect(appClient?: AppClient, options: AppWebsocketConnectionOptions = {}) {
+  static async connect(
+    appClient?: AppClient,
+    options: AppWebsocketConnectionOptions = {}
+  ) {
+    // We olny want one global instance of SimpleHolochain to omit accumulating poll intervals
+    if (window.__SIMPLE_HOLOCHAIN__) return window.__SIMPLE_HOLOCHAIN__;
     if (!appClient) {
       appClient = await AppWebsocket.connect(options);
     }
@@ -317,7 +364,11 @@ export class SimpleHolochain {
       "generic_dna",
       "generic_zome"
     );
-    return new SimpleHolochain(appClient, zomeClient);
+    const simpleHolochain = new SimpleHolochain(appClient, zomeClient);
+    // In case another SimpleHolochain got created while we were connecting to the appwebsocket, cancel
+    if (window.__SIMPLE_HOLOCHAIN__) return window.__SIMPLE_HOLOCHAIN__;
+    window.__SIMPLE_HOLOCHAIN__ = simpleHolochain;
+    return simpleHolochain;
   }
 
   private nodeStore(nodeId: NodeId): NodeStore {
@@ -345,13 +396,192 @@ export class SimpleHolochain {
     }
   }
 
-
   subscribeToNode(
     nodeId: NodeId,
     cb: (value: AsyncStatus<NodeStoreContent>) => any
   ): Unsubscriber {
     const nodeStore = this.nodeStore(nodeId);
     return nodeStore.subscribe(cb);
+  }
+
+  /**
+   * Updates the contents of the node stores. If allowDelete is false (default)
+   * then existing linked node ids will not get deleted. This is to prevent
+   * deletion of links that arrived via signals.
+   *
+   * @param contents
+   * @param allowDelete
+   */
+  nodeContentsToStore(contents: NodeAndLinkedIds[], allowDelete = false): void {
+    contents.forEach((nodeAndLinkedIds) => {
+      switch (nodeAndLinkedIds.content.type) {
+        case "Anchor": {
+          const nodeStore = this.anchorStores[nodeAndLinkedIds.content.content];
+          if (nodeStore) {
+            if (allowDelete) {
+              nodeStore.nodeStore.set({
+                status: "complete",
+                value: {
+                  content: {
+                    type: "Anchor",
+                    content: nodeAndLinkedIds.content.content,
+                  },
+                  linkedNodeIds: nodeAndLinkedIds.linked_node_ids,
+                },
+              });
+            } else {
+              nodeStore.nodeStore.update((store) => {
+                let newLinkedNodeIds: NodeId[] = [];
+                if (store.status === "complete") {
+                  newLinkedNodeIds = store.value.linkedNodeIds;
+                }
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeId) => {
+                  if (!containsNodeId(newLinkedNodeIds, nodeId)) {
+                    newLinkedNodeIds.push(nodeId);
+                  }
+                });
+                return {
+                  status: "complete",
+                  value: {
+                    content: {
+                      type: "Anchor",
+                      content: nodeAndLinkedIds.content.content as string,
+                    },
+                    linkedNodeIds: newLinkedNodeIds,
+                  },
+                };
+              });
+            }
+          }
+          break;
+        }
+        case "Agent": {
+          const nodeStore =
+            this.anchorStores[
+              encodeHashToBase64(nodeAndLinkedIds.content.content)
+            ];
+          if (nodeStore) {
+            if (allowDelete) {
+              nodeStore.nodeStore.set({
+                status: "complete",
+                value: {
+                  content: {
+                    type: "Agent",
+                    content: nodeAndLinkedIds.content.content,
+                  },
+                  linkedNodeIds: nodeAndLinkedIds.linked_node_ids,
+                },
+              });
+            } else {
+              nodeStore.nodeStore.update((store) => {
+                let newLinkedNodeIds: NodeId[] = [];
+                if (store.status === "complete") {
+                  newLinkedNodeIds = store.value.linkedNodeIds;
+                }
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeId) => {
+                  if (!containsNodeId(newLinkedNodeIds, nodeId)) {
+                    newLinkedNodeIds.push(nodeId);
+                  }
+                });
+                return {
+                  status: "complete",
+                  value: {
+                    content: {
+                      type: "Agent",
+                      content: nodeAndLinkedIds.content.content as AgentPubKey,
+                    },
+                    linkedNodeIds: newLinkedNodeIds,
+                  },
+                };
+              });
+            }
+          }
+          break;
+        }
+        case "Thing": {
+          const nodeStore =
+            this.thingStores[
+              encodeHashToBase64(nodeAndLinkedIds.content.content.id)
+            ];
+          if (nodeStore) {
+            if (allowDelete) {
+              nodeStore.nodeStore.set({
+                status: "complete",
+                value: {
+                  content: {
+                    type: "Thing",
+                    content: nodeAndLinkedIds.content.content,
+                  },
+                  linkedNodeIds: nodeAndLinkedIds.linked_node_ids,
+                },
+              });
+            } else {
+              nodeStore.nodeStore.update((store) => {
+                let newLinkedNodeIds: NodeId[] = [];
+                if (store.status === "complete") {
+                  newLinkedNodeIds = store.value.linkedNodeIds;
+                }
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeId) => {
+                  if (!containsNodeId(newLinkedNodeIds, nodeId)) {
+                    newLinkedNodeIds.push(nodeId);
+                  }
+                });
+                return {
+                  status: "complete",
+                  value: {
+                    content: {
+                      type: "Thing",
+                      content: nodeAndLinkedIds.content.content as Thing,
+                    },
+                    linkedNodeIds: nodeAndLinkedIds.linked_node_ids,
+                  },
+                };
+              });
+            }
+          }
+        }
+      }
+    });
+  }
+
+  async pollStore(nodeId: NodeId, allowDelete = false): Promise<void> {
+    const nodeAndLinkedIds = await this.getNodeAndLinkedNodeIds(nodeId);
+    if (nodeAndLinkedIds)
+      this.nodeContentsToStore([nodeAndLinkedIds], allowDelete);
+  }
+
+  async pollStoresById(nodeIds: NodeId[], allowDelete = false): Promise<void> {
+    const nodesAndLinkedIds = await this.batchGetNodeAndLinkedNodeIds(nodeIds);
+    this.nodeContentsToStore(nodesAndLinkedIds, allowDelete);
+  }
+
+  async pollStores(allowDelete = false): Promise<void> {
+    console.log("Polling stores...");
+    const anchorStoresToPoll = Object.values(this.anchorStores)
+      .filter((nodeStore) => nodeStore.isSubscribed)
+      .map((nodeStore) => nodeStore.nodeId);
+    const agentStoresToPoll = Object.values(this.agentStores)
+      .filter((nodeStore) => nodeStore.isSubscribed)
+      .map((nodeStore) => nodeStore.nodeId);
+    const thingStoresToPoll = Object.values(this.thingStores)
+      .filter((nodeStore) => nodeStore.isSubscribed)
+      .map((nodeStore) => nodeStore.nodeId);
+    const nodesToPoll = [
+      ...anchorStoresToPoll,
+      ...agentStoresToPoll,
+      ...thingStoresToPoll,
+    ];
+    console.log("Nodes to poll: ", nodesToPoll);
+    const nodesAndLinkedIds = await this.batchGetNodeAndLinkedNodeIds(
+      nodesToPoll
+    );
+    this.nodeContentsToStore(nodesAndLinkedIds, allowDelete);
+  }
+
+  async getRecords(
+    hashes: AnyDhtHash[]
+  ): Promise<(HolochainRecord | undefined)[]> {
+    return this.callZome("get_records", hashes);
   }
 
   /**
@@ -494,6 +724,31 @@ export class SimpleHolochain {
   }
 
   /**
+   * Gets the node content and linked node ids for for the given node id
+   *
+   * @param nodeIds
+   * @returns
+   */
+  async getNodeAndLinkedNodeIds(
+    nodeId: NodeId
+  ): Promise<NodeAndLinkedIds | undefined> {
+    return this.callZome("get_node_and_linked_node_ids", nodeId);
+  }
+
+  /**
+   * Gets the node content and linked node ids for a list of node ids in a single
+   * zome call
+   *
+   * @param nodeIds
+   * @returns
+   */
+  async batchGetNodeAndLinkedNodeIds(
+    nodeIds: NodeId[]
+  ): Promise<NodeAndLinkedIds[]> {
+    return this.callZome("batch_get_node_and_linked_node_ids", nodeIds);
+  }
+
+  /**
    * Creates links from a specified source node
    *
    * @param src
@@ -564,5 +819,14 @@ function areNodesEqual(nodeId_a: NodeId, nodeId_b: NodeId): boolean {
     return encodeHashToBase64(nodeId_a.id) === encodeHashToBase64(nodeId_b.id);
   if (nodeId_a.type === "Anchor" && nodeId_b.type === "Anchor")
     return nodeId_a.id === nodeId_b.id;
+  return false;
+}
+
+function containsNodeId(arr: NodeId[], nodeId: NodeId): boolean {
+  for (const id of arr) {
+    if (areNodesEqual(id, nodeId)) {
+      return true;
+    }
+  }
   return false;
 }

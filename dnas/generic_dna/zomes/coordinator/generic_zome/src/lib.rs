@@ -20,11 +20,12 @@ pub fn init() -> ExternResult<InitCallbackResult> {
     Ok(InitCallbackResult::Pass)
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NodeLink {
     src: NodeId,
     dst: NodeId,
     tag: Option<Vec<u8>>,
+    create_action_hash: ActionHash,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -47,11 +48,23 @@ pub enum Signal {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum SignalKind {
-    ThingCreated { thing: Thing },
-    ThingUpdated { thing: Thing },
-    ThingDeleted { id: ActionHash },
-    LinksCreated { links: Vec<NodeLink> },
-    LinksDeleted { links: Vec<NodeLink> },
+    ThingCreated {
+        thing: Thing,
+    },
+    ThingUpdated {
+        thing: Thing,
+        update_action_hash: ActionHash,
+        update_link_action_hash: ActionHash,
+    },
+    ThingDeleted {
+        id: ActionHash,
+    },
+    LinksCreated {
+        links: Vec<NodeLink>,
+    },
+    LinksDeleted {
+        links: Vec<NodeLink>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]

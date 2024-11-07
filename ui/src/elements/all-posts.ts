@@ -30,8 +30,8 @@ export class AllPosts extends LitElement {
         type: 'Anchor',
         id: 'ALL_POSTS',
       },
-      val => {
-        this.nodeContent = val;
+      status => {
+        this.nodeContent = status;
         this.requestUpdate();
       }
     );

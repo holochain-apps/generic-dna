@@ -27,6 +27,8 @@ export type SignalKind =
   | {
       type: "ThingUpdated";
       thing: Thing;
+      update_action_hash: ActionHash;
+      update_link_action_hash: ActionHash;
     }
   | {
       type: "ThingDeleted";
@@ -85,6 +87,7 @@ export type NodeLink = {
   src: NodeId;
   dst: NodeId;
   tag: Uint8Array | undefined;
+  create_action_hash: ActionHash;
 };
 
 /**
@@ -188,3 +191,8 @@ export type CreateOrDeleteLinksInput = {
   src: NodeId;
   links: LinkInputRust[];
 };
+
+export type NodeAndLinkedIds = {
+  content: NodeContent,
+  linked_node_ids: NodeId[],
+}
