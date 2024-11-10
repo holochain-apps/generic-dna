@@ -541,7 +541,7 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
     let links_deleted = delete_links_from_node_inner(input)?;
 
     // Emit signals about deleted links to the frontend
-    emit_signal(Signal::Local(SignalKind::LinksCreated {
+    emit_signal(Signal::Local(SignalKind::LinksDeleted {
         links: links_deleted,
     }))?;
 
@@ -761,7 +761,7 @@ fn create_link_from_node_by_id(
                     let ah = create_link(
                         base.clone(),
                         path_entry_hash,
-                        LinkTypes::ToAgent,
+                        LinkTypes::ToAnchor,
                         derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
                     )?;
                     Ok((
@@ -801,7 +801,7 @@ fn create_link_from_node_by_id(
                     let ah = create_link(
                         base.clone(),
                         path_entry_hash,
-                        LinkTypes::ToAgent,
+                        LinkTypes::ToAnchor,
                         derive_link_tag(
                             link.tag.clone(),
                             Some(backlink_action_hash.clone()),
@@ -830,7 +830,7 @@ fn create_link_from_node_by_id(
                 let ah = create_link(
                     base.clone(),
                     action_hash,
-                    LinkTypes::ToAgent,
+                    LinkTypes::ToThing,
                     derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
                 )?;
                 Ok((
@@ -870,7 +870,7 @@ fn create_link_from_node_by_id(
                 let ah = create_link(
                     base.clone(),
                     action_hash,
-                    LinkTypes::ToAgent,
+                    LinkTypes::ToThing,
                     derive_link_tag(
                         link.tag.clone(),
                         Some(backlink_action_hash.clone()),

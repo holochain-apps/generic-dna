@@ -8,7 +8,7 @@ pub fn validate_create_link_to_anchor(
 ) -> ExternResult<ValidateCallbackResult> {
     // Check the entry type for the given action hash
     target_address
-        .into_action_hash()
+        .into_entry_hash()
         .ok_or(wasm_error!(WasmErrorInner::Guest(
             "Link target is not an entry hash".to_string()
         )))?;

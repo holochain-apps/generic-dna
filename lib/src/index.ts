@@ -406,6 +406,11 @@ export class SimpleHolochain {
     return nodeStore.subscribe(cb);
   }
 
+
+  get myPubkey() {
+    return this.client.myPubKey
+  }
+
   /**
    * Updates the contents of the node stores. If allowDelete is false (default)
    * then existing linked node ids will not get deleted. This is to prevent
@@ -831,18 +836,21 @@ function areNodeAndTagEqual(
   nodeId_b: NodeIdAndTag
 ): boolean {
   if (nodeId_a.node_id.type !== nodeId_b.node_id.type) return false;
+  const bothUint8Array = !!nodeId_a.tag && !!nodeId_b.tag;
+  const tagsEqual = bothUint8Array ? areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag) : !nodeId_a.tag && !nodeId_b.tag;
+
   if (nodeId_a.node_id.type === "Agent" && nodeId_b.node_id.type === "Agent")
     return (
       encodeHashToBase64(nodeId_a.node_id.id) ===
-        encodeHashToBase64(nodeId_b.node_id.id) && areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag)
+        encodeHashToBase64(nodeId_b.node_id.id) && tagsEqual
     );
   if (nodeId_a.node_id.type === "Thing" && nodeId_b.node_id.type === "Thing")
     return (
       encodeHashToBase64(nodeId_a.node_id.id) ===
-      encodeHashToBase64(nodeId_b.node_id.id) && areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag)
+      encodeHashToBase64(nodeId_b.node_id.id) && tagsEqual
     );
   if (nodeId_a.node_id.type === "Anchor" && nodeId_b.node_id.type === "Anchor")
-    return nodeId_a.node_id.id === nodeId_b.node_id.id && areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag);
+    return nodeId_a.node_id.id === nodeId_b.node_id.id && tagsEqual;
   return false;
 }
 
