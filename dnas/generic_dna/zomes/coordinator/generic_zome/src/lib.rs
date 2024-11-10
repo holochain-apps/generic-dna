@@ -106,12 +106,27 @@ pub const SIMPLE_HOLOCHAIN_ALL_AGENTS: &str = "SIMPLE_HOLOCHAIN_ALL_AGENTS";
 #[hdk_extern]
 pub fn add_agent_to_anchor(_: ()) -> ExternResult<ActionHash> {
     let path = Path::from(SIMPLE_HOLOCHAIN_ALL_AGENTS);
+    let my_agent_pubkey = agent_info()?.agent_initial_pubkey;
     create_link(
         path.path_entry_hash()?,
-        agent_info()?.agent_initial_pubkey,
+        my_agent_pubkey.clone(),
         LinkTypes::ToAgent,
-        (),
+        derive_link_tag(None, None, NodeId::Agent(my_agent_pubkey))?,
     )
+}
+
+pub fn derive_link_tag(
+    input: Option<Vec<u8>>,
+    backlink_action_hash: Option<ActionHash>,
+    target_node_id: NodeId,
+) -> ExternResult<LinkTag> {
+    let link_tag_content = LinkTagContent {
+        tag: input,
+        backlink_action_hash,
+        target_node_id,
+    };
+    let serialized_content = serialize_link_tag(link_tag_content)?;
+    Ok(LinkTag::from(serialized_content))
 }
 
 // /// Whenever an action is committed, we emit a signal to the UI elements to reactively update them

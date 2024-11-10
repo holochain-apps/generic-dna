@@ -1,4 +1,4 @@
-use crate::{NodeLink, Signal, SignalKind, Thing};
+use crate::{derive_link_tag, NodeLink, Signal, SignalKind, Thing};
 use generic_zome_integrity::*;
 use hdk::prelude::*;
 
@@ -902,20 +902,6 @@ fn linkable_hash_from_node_id(node_id: NodeId) -> ExternResult<AnyLinkableHash> 
         NodeId::Anchor(a) => Ok(Path::from(a).path_entry_hash()?.into()),
         NodeId::Thing(a) => Ok(a.into()),
     }
-}
-
-fn derive_link_tag(
-    input: Option<Vec<u8>>,
-    backlink_action_hash: Option<ActionHash>,
-    target_node_id: NodeId,
-) -> ExternResult<LinkTag> {
-    let link_tag_content = LinkTagContent {
-        tag: input,
-        backlink_action_hash,
-        target_node_id,
-    };
-    let serialized_content = serialize_link_tag(link_tag_content)?;
-    Ok(LinkTag::from(serialized_content))
 }
 
 fn thing_record_to_thing(record: Record) -> ExternResult<Thing> {
