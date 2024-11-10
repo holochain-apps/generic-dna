@@ -725,7 +725,7 @@ fn create_link_from_node_by_id(
                     agent.clone(),
                     base.clone(),
                     LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
+                    derive_link_tag(link.tag.clone(), None, src.clone())?,
                 )?;
                 let ah = create_link(
                     base.clone(),
@@ -734,7 +734,7 @@ fn create_link_from_node_by_id(
                     derive_link_tag(
                         link.tag.clone(),
                         Some(backlink_action_hash.clone()),
-                        src.clone(),
+                        link.node_id.clone(),
                     )?,
                 )?;
                 Ok((
@@ -796,7 +796,7 @@ fn create_link_from_node_by_id(
                         path_entry_hash.clone(),
                         base.clone(),
                         LinkTypes::ToThing,
-                        derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
+                        derive_link_tag(link.tag.clone(), None, src.clone())?,
                     )?;
                     let ah = create_link(
                         base.clone(),
@@ -805,7 +805,7 @@ fn create_link_from_node_by_id(
                         derive_link_tag(
                             link.tag.clone(),
                             Some(backlink_action_hash.clone()),
-                            src.clone(),
+                            link.node_id.clone(),
                         )?,
                     )?;
                     Ok((
@@ -865,7 +865,7 @@ fn create_link_from_node_by_id(
                     action_hash.clone(),
                     base.clone(),
                     LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
+                    derive_link_tag(link.tag.clone(), None, src.clone())?,
                 )?;
                 let ah = create_link(
                     base.clone(),
@@ -874,7 +874,7 @@ fn create_link_from_node_by_id(
                     derive_link_tag(
                         link.tag.clone(),
                         Some(backlink_action_hash.clone()),
-                        src.clone(),
+                        link.node_id.clone(),
                     )?,
                 )?;
                 Ok((
