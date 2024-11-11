@@ -2,7 +2,7 @@ use hdi::prelude::*;
 
 use crate::NodeId;
 
-#[derive(Serialize, Deserialize, SerializedBytes, Debug)]
+#[derive(Serialize, Deserialize, SerializedBytes, Clone, Debug)]
 pub struct LinkTagContent {
     pub tag: Option<Vec<u8>>,
     // action hash of the backlink. Used to efficiently delete the backlink
@@ -14,6 +14,9 @@ pub struct LinkTagContent {
     // to retrieve the anchor string that they're pointing to directly
     // from the link
     pub target_node_id: NodeId,
+    /// If it's a link pointing to a Thing then this contains the timestamp
+    /// of when the Thing was originally created
+    pub thing_created_at: Option<Timestamp>,
 }
 
 pub fn serialize_link_tag(link_tag_content: LinkTagContent) -> ExternResult<Vec<u8>> {

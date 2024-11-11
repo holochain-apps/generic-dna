@@ -1,5 +1,6 @@
-use crate::{derive_link_tag, NodeLink, Signal, SignalKind, Thing};
+use crate::{derive_link_tag, NodeLink, NodeLinkMeta, Signal, SignalKind, Thing};
 use generic_zome_integrity::*;
+use hdi::prelude::holochain_integrity_types::action;
 use hdk::prelude::*;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -19,9 +20,9 @@ pub enum NodeContent {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct NodeIdAndTag {
+pub struct NodeIdAndMetaTag {
     node_id: NodeId,
-    tag: Option<Vec<u8>>,
+    meta_tag: LinkTagContent,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -61,7 +62,7 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
         WasmErrorInner::Guest("Failed to get record that was just created.".into())
     ))?;
 
-    let mut links_created: Vec<NodeLink> = Vec::new();
+    let mut links_created: Vec<NodeLinkMeta> = Vec::new();
 
     // 2. Create all links as necessary
     match input.links.clone() {
@@ -352,22 +353,31 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
 }
 
 #[hdk_extern]
-pub fn get_all_linked_node_ids(node_id: NodeId) -> ExternResult<Vec<NodeIdAndTag>> {
-    let mut linked_node_ids: Vec<NodeIdAndTag> = Vec::new();
+pub fn get_all_linked_node_ids(node_id: NodeId) -> ExternResult<Vec<NodeIdAndMetaTag>> {
+    let mut linked_node_ids: Vec<NodeIdAndMetaTag> = Vec::new();
     let linked_thing_ids = get_linked_thing_ids(node_id.clone())?;
-    for (thing_id, tag) in linked_thing_ids {
+    for (thing_id, meta_tag) in linked_thing_ids {
         let node = NodeId::Thing(thing_id);
-        linked_node_ids.push(NodeIdAndTag { node_id: node, tag });
+        linked_node_ids.push(NodeIdAndMetaTag {
+            node_id: node,
+            meta_tag,
+        });
     }
     let linked_anchors = get_linked_anchors(node_id.clone())?;
-    for (anchor, tag) in linked_anchors {
+    for (anchor, meta_tag) in linked_anchors {
         let node = NodeId::Anchor(anchor);
-        linked_node_ids.push(NodeIdAndTag { node_id: node, tag });
+        linked_node_ids.push(NodeIdAndMetaTag {
+            node_id: node,
+            meta_tag,
+        });
     }
     let linked_agents = get_linked_agents(node_id)?;
-    for (agent, tag) in linked_agents {
+    for (agent, meta_tag) in linked_agents {
         let node = NodeId::Agent(agent);
-        linked_node_ids.push(NodeIdAndTag { node_id: node, tag });
+        linked_node_ids.push(NodeIdAndMetaTag {
+            node_id: node,
+            meta_tag,
+        });
     }
     Ok(linked_node_ids)
 }
@@ -394,7 +404,7 @@ pub fn get_all_linked_nodes(node_id: NodeId) -> ExternResult<Vec<NodeContent>> {
 }
 
 #[hdk_extern]
-pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<(AgentPubKey, Option<Vec<u8>>)>> {
+pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<(AgentPubKey, LinkTagContent)>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAgent)?.build())?;
     Ok(links
@@ -406,26 +416,26 @@ pub fn get_linked_agents(node_id: NodeId) -> ExternResult<Vec<(AgentPubKey, Opti
             )
         })
         .filter(|(maybe_agent, maybe_tag)| maybe_agent.is_some() && maybe_tag.is_some())
-        .map(|(agent, tag)| (agent.unwrap(), tag.unwrap().tag))
+        .map(|(agent, tag)| (agent.unwrap(), tag.unwrap()))
         .collect())
 }
 
 #[hdk_extern]
-pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<(String, Option<Vec<u8>>)>> {
+pub fn get_linked_anchors(node_id: NodeId) -> ExternResult<Vec<(String, LinkTagContent)>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToAnchor)?.build())?;
     Ok(links
         .into_iter()
         .filter_map(|l| deserialize_link_tag(l.tag.0).ok())
-        .map(|c| (anchor_string_from_node_id(c.target_node_id), c.tag))
+        .map(|c| (anchor_string_from_node_id(c.target_node_id.clone()), c))
         .filter(|(maybe_anchor, _)| maybe_anchor.is_some())
-        .map(|(anchor, tag)| (anchor.unwrap(), tag))
+        .map(|(anchor, meta_tag)| (anchor.unwrap(), meta_tag))
         .collect())
 }
 
 /// Returns the linked thing ids together with the link tag
 #[hdk_extern]
-pub fn get_linked_thing_ids(node_id: NodeId) -> ExternResult<Vec<(ActionHash, Option<Vec<u8>>)>> {
+pub fn get_linked_thing_ids(node_id: NodeId) -> ExternResult<Vec<(ActionHash, LinkTagContent)>> {
     let base = linkable_hash_from_node_id(node_id)?;
     let links = get_links(GetLinksInputBuilder::try_new(base, LinkTypes::ToThing)?.build())?;
     Ok(links
@@ -437,7 +447,7 @@ pub fn get_linked_thing_ids(node_id: NodeId) -> ExternResult<Vec<(ActionHash, Op
             )
         })
         .filter(|(maybe_action, maybe_tag)| maybe_action.is_some() && maybe_tag.is_some())
-        .map(|(action, tag)| (action.unwrap(), tag.unwrap().tag))
+        .map(|(action, tag)| (action.unwrap(), tag.unwrap()))
         .collect())
 }
 
@@ -459,7 +469,7 @@ pub fn get_linked_things(node_id: NodeId) -> ExternResult<Vec<Thing>> {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NodeAndLinkedIds {
     pub content: NodeContent,
-    pub linked_node_ids: Vec<NodeIdAndTag>,
+    pub linked_node_ids: Vec<NodeIdAndMetaTag>,
 }
 
 #[hdk_extern]
@@ -521,7 +531,7 @@ pub struct CreateOrDeleteLinksInput {
 
 #[hdk_extern]
 pub fn create_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<()> {
-    let mut links_created: Vec<NodeLink> = Vec::new();
+    let mut links_created: Vec<NodeLinkMeta> = Vec::new();
     for link in input.links {
         let (node_link, maybe_backlink) =
             create_link_from_node_by_id(input.src.clone(), link.clone())?;
@@ -595,10 +605,13 @@ fn delete_links_from_node_inner(input: CreateOrDeleteLinksInput) -> ExternResult
                 let target = linkable_hash_from_node_id(link_input.node_id.clone())?;
                 let link_tag_content = deserialize_link_tag(link.tag.0)?;
                 if target == link.target && link_input.tag == link_tag_content.tag {
-                    if let Some(backlink_action_hash) = link_tag_content.backlink_action_hash {
+                    if let Some(backlink_action_hash) =
+                        link_tag_content.backlink_action_hash.clone()
+                    {
                         delete_link(backlink_action_hash.clone())?;
                         links_deleted.push(NodeLink {
                             src: link_tag_content.target_node_id,
+                            // TODO
                             dst: input.src.clone(),
                             tag: link_tag_content.tag,
                             create_action_hash: backlink_action_hash,
@@ -682,72 +695,78 @@ fn delete_links_from_node_inner(input: CreateOrDeleteLinksInput) -> ExternResult
 fn create_link_from_node_by_id(
     src: NodeId,
     link: LinkInput,
-) -> ExternResult<(NodeLink, Option<NodeLink>)> {
+) -> ExternResult<(NodeLinkMeta, Option<NodeLinkMeta>)> {
     let base: HoloHash<hash_type::AnyLinkable> = linkable_hash_from_node_id(src.clone())?;
     match link.node_id.clone() {
         NodeId::Agent(agent) => match link.direction {
             LinkDirection::To => {
-                let ah = create_link(
-                    base.clone(),
-                    agent,
-                    LinkTypes::ToAgent,
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
-                )?;
+                let (link_tag, link_tag_content) =
+                    derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                let ah = create_link(base.clone(), agent, LinkTypes::ToAgent, link_tag)?;
                 Ok((
-                    NodeLink {
+                    NodeLinkMeta {
                         src,
                         dst: link.node_id,
-                        tag: link.tag,
+                        meta_tag: link_tag_content,
                         create_action_hash: ah,
                     },
                     None,
                 ))
             }
             LinkDirection::From => {
-                let ah = create_link(
-                    agent,
-                    base.clone(),
-                    LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
-                )?;
+                let (link_tag, link_tag_content) =
+                    derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                let ah = create_link(agent, base.clone(), LinkTypes::ToThing, link_tag)?;
                 Ok((
-                    NodeLink {
+                    NodeLinkMeta {
                         src,
                         dst: link.node_id,
-                        tag: link.tag,
+                        meta_tag: link_tag_content,
                         create_action_hash: ah,
                     },
                     None,
                 ))
             }
             LinkDirection::Bidirectional => {
+                let src_thing_created_at = match src.clone() {
+                    NodeId::Thing(thing_id) => {
+                        let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
+                            WasmErrorInner::Guest(format!(
+                            "Record of Thing to link from not found. Tried to link to thing with id {}",
+                            ActionHashB64::from(thing_id)
+                        ))
+                        ))?;
+                        Some(thing_record.action().timestamp())
+                    }
+                    _ => None,
+                };
+                let (link_tag_backlink, link_tag_content_backlink) =
+                    derive_link_tag(link.tag.clone(), None, src.clone(), src_thing_created_at)?;
                 let backlink_action_hash = create_link(
                     agent.clone(),
                     base.clone(),
                     LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, src.clone())?,
+                    link_tag_backlink,
                 )?;
-                let ah = create_link(
-                    base.clone(),
-                    agent,
-                    LinkTypes::ToAgent,
-                    derive_link_tag(
-                        link.tag.clone(),
-                        Some(backlink_action_hash.clone()),
-                        link.node_id.clone(),
-                    )?,
+                let (link_tag, link_tag_content) = derive_link_tag(
+                    link.tag.clone(),
+                    Some(backlink_action_hash.clone()),
+                    link.node_id.clone(),
+                    None,
                 )?;
+
+                let ah = create_link(base.clone(), agent, LinkTypes::ToAgent, link_tag)?;
                 Ok((
-                    NodeLink {
+                    NodeLinkMeta {
                         src: src.clone(),
                         dst: link.node_id.clone(),
-                        tag: link.tag.clone(),
+                        meta_tag: link_tag_content,
                         create_action_hash: ah,
                     },
-                    Some(NodeLink {
+                    Some(NodeLinkMeta {
                         src: link.node_id,
                         dst: src,
-                        tag: link.tag,
+                        meta_tag: link_tag_content_backlink,
                         create_action_hash: backlink_action_hash,
                     }),
                 ))
@@ -758,141 +777,174 @@ fn create_link_from_node_by_id(
             let path_entry_hash = path.path_entry_hash()?;
             match link.direction {
                 LinkDirection::To => {
-                    let ah = create_link(
-                        base.clone(),
-                        path_entry_hash,
-                        LinkTypes::ToAnchor,
-                        derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
-                    )?;
+                    let (link_tag, link_tag_content) =
+                        derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                    let ah =
+                        create_link(base.clone(), path_entry_hash, LinkTypes::ToAnchor, link_tag)?;
                     Ok((
-                        NodeLink {
+                        NodeLinkMeta {
                             src,
                             dst: link.node_id,
-                            tag: link.tag,
+                            meta_tag: link_tag_content,
                             create_action_hash: ah,
                         },
                         None,
                     ))
                 }
                 LinkDirection::From => {
-                    let ah = create_link(
-                        path_entry_hash,
-                        base.clone(),
-                        LinkTypes::ToThing,
-                        derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
-                    )?;
+                    let (link_tag, link_tag_content) =
+                        derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                    let ah =
+                        create_link(path_entry_hash, base.clone(), LinkTypes::ToThing, link_tag)?;
                     Ok((
-                        NodeLink {
+                        NodeLinkMeta {
                             src,
                             dst: link.node_id,
-                            tag: link.tag,
+                            meta_tag: link_tag_content,
                             create_action_hash: ah,
                         },
                         None,
                     ))
                 }
                 LinkDirection::Bidirectional => {
+                    let src_thing_created_at = match src.clone() {
+                        NodeId::Thing(thing_id) => {
+                            let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
+                                WasmErrorInner::Guest(format!(
+                                "Record of Thing to link from not found. Tried to link to thing with id {}",
+                                ActionHashB64::from(thing_id)
+                            ))
+                            ))?;
+                            Some(thing_record.action().timestamp())
+                        }
+                        _ => None,
+                    };
+                    let (link_tag_backlink, link_tag_content_backlink) =
+                        derive_link_tag(link.tag.clone(), None, src.clone(), src_thing_created_at)?;
                     let backlink_action_hash = create_link(
                         path_entry_hash.clone(),
                         base.clone(),
                         LinkTypes::ToThing,
-                        derive_link_tag(link.tag.clone(), None, src.clone())?,
+                        link_tag_backlink,
                     )?;
-                    let ah = create_link(
-                        base.clone(),
-                        path_entry_hash,
-                        LinkTypes::ToAnchor,
-                        derive_link_tag(
-                            link.tag.clone(),
-                            Some(backlink_action_hash.clone()),
-                            link.node_id.clone(),
-                        )?,
+                    let (link_tag, link_tag_content) = derive_link_tag(
+                        link.tag.clone(),
+                        Some(backlink_action_hash.clone()),
+                        link.node_id.clone(),
+                        None,
                     )?;
+                    let ah =
+                        create_link(base.clone(), path_entry_hash, LinkTypes::ToAnchor, link_tag)?;
                     Ok((
-                        NodeLink {
+                        NodeLinkMeta {
                             src: src.clone(),
                             dst: link.node_id.clone(),
-                            tag: link.tag.clone(),
+                            meta_tag: link_tag_content,
                             create_action_hash: ah,
                         },
-                        Some(NodeLink {
+                        Some(NodeLinkMeta {
                             src: link.node_id,
                             dst: src,
-                            tag: link.tag,
+                            meta_tag: link_tag_content_backlink,
                             create_action_hash: backlink_action_hash,
                         }),
                     ))
                 }
             }
         }
-        NodeId::Thing(action_hash) => match link.direction {
-            LinkDirection::To => {
-                let ah = create_link(
-                    base.clone(),
-                    action_hash,
-                    LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
-                )?;
-                Ok((
-                    NodeLink {
-                        src,
-                        dst: link.node_id,
-                        tag: link.tag,
-                        create_action_hash: ah,
-                    },
-                    None,
-                ))
-            }
-            LinkDirection::From => {
-                let ah = create_link(
-                    action_hash,
-                    base.clone(),
-                    LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone())?,
-                )?;
-                Ok((
-                    NodeLink {
-                        src,
-                        dst: link.node_id,
-                        tag: link.tag,
-                        create_action_hash: ah,
-                    },
-                    None,
-                ))
-            }
-            LinkDirection::Bidirectional => {
-                let backlink_action_hash = create_link(
-                    action_hash.clone(),
-                    base.clone(),
-                    LinkTypes::ToThing,
-                    derive_link_tag(link.tag.clone(), None, src.clone())?,
-                )?;
-                let ah = create_link(
-                    base.clone(),
-                    action_hash,
-                    LinkTypes::ToThing,
-                    derive_link_tag(
+        NodeId::Thing(action_hash) => {
+            let thing_record = get(action_hash.clone(), GetOptions::default())?.ok_or(
+                wasm_error!(WasmErrorInner::Guest(format!(
+                    "Record of Thing to link to not found. Tried to link to Thing with id {}",
+                    ActionHashB64::from(action_hash.clone())
+                ))),
+            )?;
+            match link.direction {
+                LinkDirection::To => {
+                    let (link_tag_backlink, link_tag_content_backlink) = derive_link_tag(
+                        link.tag.clone(),
+                        None,
+                        link.node_id.clone(),
+                        Some(thing_record.action().timestamp()),
+                    )?;
+                    let ah = create_link(
+                        base.clone(),
+                        action_hash,
+                        LinkTypes::ToThing,
+                        link_tag_backlink,
+                    )?;
+                    Ok((
+                        NodeLinkMeta {
+                            src,
+                            dst: link.node_id,
+                            meta_tag: link_tag_content_backlink,
+                            create_action_hash: ah,
+                        },
+                        None,
+                    ))
+                }
+                LinkDirection::From => {
+                    let (link_tag, link_tag_content) = derive_link_tag(
+                        link.tag.clone(),
+                        None,
+                        link.node_id.clone(),
+                        Some(thing_record.action().timestamp()),
+                    )?;
+                    let ah = create_link(action_hash, base.clone(), LinkTypes::ToThing, link_tag)?;
+                    Ok((
+                        NodeLinkMeta {
+                            src,
+                            dst: link.node_id,
+                            meta_tag: link_tag_content,
+                            create_action_hash: ah,
+                        },
+                        None,
+                    ))
+                }
+                LinkDirection::Bidirectional => {
+                    let src_thing_created_at = match src.clone() {
+                        NodeId::Thing(thing_id) => {
+                            let thing_record = get(thing_id.clone(), GetOptions::default())?
+                                .ok_or(wasm_error!(WasmErrorInner::Guest(format!(
+                        "Record of Thing to link from not found. Tried to link to thing with id {}",
+                        ActionHashB64::from(thing_id)
+                    ))))?;
+                            Some(thing_record.action().timestamp())
+                        }
+                        _ => None,
+                    };
+                    let (link_tag_backlink, link_tag_content_backlink) =
+                        derive_link_tag(link.tag.clone(), None, src.clone(), src_thing_created_at)?;
+                    let backlink_action_hash = create_link(
+                        action_hash.clone(),
+                        base.clone(),
+                        LinkTypes::ToThing,
+                        link_tag_backlink,
+                    )?;
+                    let (link_tag, link_tag_content) = derive_link_tag(
                         link.tag.clone(),
                         Some(backlink_action_hash.clone()),
                         link.node_id.clone(),
-                    )?,
-                )?;
-                Ok((
-                    NodeLink {
-                        src: src.clone(),
-                        dst: link.node_id.clone(),
-                        tag: link.tag.clone(),
-                        create_action_hash: ah,
-                    },
-                    Some(NodeLink {
-                        src: link.node_id,
-                        dst: src,
-                        tag: link.tag,
-                        create_action_hash: backlink_action_hash,
-                    }),
-                ))
+                        Some(thing_record.action().timestamp()),
+                    )?;
+                    let ah = create_link(base.clone(), action_hash, LinkTypes::ToThing, link_tag)?;
+                    Ok((
+                        NodeLinkMeta {
+                            src: src.clone(),
+                            dst: link.node_id.clone(),
+                            meta_tag: link_tag_content,
+                            create_action_hash: ah,
+                        },
+                        Some(NodeLinkMeta {
+                            src: link.node_id,
+                            dst: src,
+                            meta_tag: link_tag_content_backlink,
+                            create_action_hash: backlink_action_hash,
+                        }),
+                    ))
+                }
             }
-        },
+        }
     }
 }
 
