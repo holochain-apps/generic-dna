@@ -36,7 +36,7 @@ export type SignalKind =
     }
   | {
       type: "LinksCreated";
-      links: NodeLink[];
+      links: NodeLinkMeta[];
     }
   | {
       type: "LinksDeleted";
@@ -78,9 +78,32 @@ export type RemoteSignalInput = {
 export type EntryTypes = { type: "Thing" } & ThingEntry;
 /* dprint-ignore-end */
 
-export interface ThingEntry {
+export type ThingEntry = {
   content: string;
 }
+
+export type LinkTagContent = {
+  tag: Uint8Array | undefined,
+  // action hash of the backlink. Used to efficiently delete the backlink
+  // without having to do a get_links and filter by link targets.
+  // This seems worth it since relationship tags may potentially be
+  // used by many many different AssetRelation entries.
+  backlink_action_hash: ActionHash | undefined;
+  // For links to anchors we store the anchor string as well to be able
+  // to retrieve the anchor string that they're pointing to directly
+  // from the link
+  target_node_id: NodeId;
+  /// If it's a link pointing to a Thing then this contains the timestamp
+  /// of when the Thing was originally created
+  thing_created_at: number | undefined;
+}
+
+export type NodeLinkMeta = {
+  src: NodeId;
+  dst: NodeId;
+  meta_tag: LinkTagContent;
+  create_action_hash: ActionHash;
+};
 
 export type NodeLink = {
   src: NodeId;
@@ -105,6 +128,11 @@ export type NodeId =
       type: "Agent";
       id: AgentPubKey;
     };
+
+export type NodeIdAndMetaTag = {
+  node_id: NodeId;
+  meta_tag: LinkTagContent;
+};
 
 export type NodeIdAndTag = {
   node_id: NodeId;
@@ -200,5 +228,5 @@ export type CreateOrDeleteLinksInput = {
 
 export type NodeAndLinkedIds = {
   content: NodeContent;
-  linked_node_ids: NodeIdAndTag[];
+  linked_node_ids: NodeIdAndMetaTag[];
 };

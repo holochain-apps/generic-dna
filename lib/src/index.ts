@@ -23,8 +23,8 @@ import {
   NodeAndLinkedIds,
   NodeContent,
   NodeId,
+  NodeIdAndMetaTag,
   NodeIdAndTag,
-  NodeLink,
   RemoteSignalInput,
   Tag,
   Thing,
@@ -52,7 +52,7 @@ declare global {
 
 export type NodeStoreContent = {
   content: NodeContent;
-  linkedNodeIds: NodeIdAndTag[];
+  linkedNodeIds: NodeIdAndMetaTag[];
 };
 
 export type AsyncStatus<T> =
@@ -120,7 +120,7 @@ export class NodeStore {
     );
 
     let linkedNodeIds = await this.client.getAllLinkedNodeIds(this.nodeId);
-    console.log("@pollStore: Linked node ids: ", linkedNodeIds);
+    // console.log("@pollStore: Linked node ids: ", linkedNodeIds);
 
     if (this.nodeId.type === "Thing") {
       const latestThing = await this.client.getThing(this.nodeId.id);
@@ -285,16 +285,23 @@ export class SimpleHolochain {
         case "LinksCreated": {
           console.log("Got LINKS_CREATED SIGNAL!!");
 
-          signal.links.forEach(({ src, dst, tag }) => {
+          signal.links.forEach(({ src, dst, meta_tag }) => {
             const nodeStore = this.nodeStore(src);
             nodeStore.nodeStore.update((store) => {
               if (store.status === "complete") {
                 const currentLinkedNodeIds = store.value.linkedNodeIds;
-                const nodeExists = currentLinkedNodeIds.find((nodeIdAndTag) =>
-                  areNodeAndTagEqual({ node_id: dst, tag }, nodeIdAndTag)
+                const nodeExists = currentLinkedNodeIds.find(
+                  (nodeIdAndMetaTag) =>
+                    areNodeAndTagEqual(
+                      { node_id: dst, tag: meta_tag.tag },
+                      {
+                        node_id: nodeIdAndMetaTag.node_id,
+                        tag: nodeIdAndMetaTag.meta_tag.tag,
+                      }
+                    )
                 );
                 if (nodeExists) return store;
-                currentLinkedNodeIds.push({ node_id: dst, tag });
+                currentLinkedNodeIds.push({ node_id: dst, meta_tag });
                 store.value.linkedNodeIds = currentLinkedNodeIds;
               }
               return store;
@@ -316,7 +323,14 @@ export class SimpleHolochain {
               if (store.status === "complete") {
                 const currentLinkedNodeIds = store.value.linkedNodeIds;
                 store.value.linkedNodeIds = currentLinkedNodeIds.filter(
-                  (nodeIdAndTag) => !areNodeAndTagEqual({ node_id: dst, tag }, nodeIdAndTag)
+                  (nodeIdAndMetaTag) =>
+                    !areNodeAndTagEqual(
+                      { node_id: dst, tag },
+                      {
+                        node_id: nodeIdAndMetaTag.node_id,
+                        tag: nodeIdAndMetaTag.meta_tag.tag,
+                      }
+                    )
                 );
               }
               return store;
@@ -406,9 +420,8 @@ export class SimpleHolochain {
     return nodeStore.subscribe(cb);
   }
 
-
   get myPubkey() {
-    return this.client.myPubKey
+    return this.client.myPubKey;
   }
 
   /**
@@ -438,13 +451,18 @@ export class SimpleHolochain {
               });
             } else {
               nodeStore.nodeStore.update((store) => {
-                let newLinkedNodeIds: NodeIdAndTag[] = [];
+                let newLinkedNodeIds: NodeIdAndMetaTag[] = [];
                 if (store.status === "complete") {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
-                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndTag) => {
-                  if (!containsNodeIdAndTag(newLinkedNodeIds, nodeIdAndTag)) {
-                    newLinkedNodeIds.push(nodeIdAndTag);
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndMetaTag) => {
+                  if (
+                    !containsNodeIdAndTag(newLinkedNodeIds, {
+                      node_id: nodeIdAndMetaTag.node_id,
+                      tag: nodeIdAndMetaTag.meta_tag.tag,
+                    })
+                  ) {
+                    newLinkedNodeIds.push(nodeIdAndMetaTag);
                   }
                 });
                 return {
@@ -481,13 +499,18 @@ export class SimpleHolochain {
               });
             } else {
               nodeStore.nodeStore.update((store) => {
-                let newLinkedNodeIds: NodeIdAndTag[] = [];
+                let newLinkedNodeIds: NodeIdAndMetaTag[] = [];
                 if (store.status === "complete") {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
-                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndTag) => {
-                  if (!containsNodeIdAndTag(newLinkedNodeIds, nodeIdAndTag)) {
-                    newLinkedNodeIds.push(nodeIdAndTag);
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndMetaTag) => {
+                  if (
+                    !containsNodeIdAndTag(newLinkedNodeIds, {
+                      node_id: nodeIdAndMetaTag.node_id,
+                      tag: nodeIdAndMetaTag.meta_tag.tag,
+                    })
+                  ) {
+                    newLinkedNodeIds.push(nodeIdAndMetaTag);
                   }
                 });
                 return {
@@ -524,13 +547,16 @@ export class SimpleHolochain {
               });
             } else {
               nodeStore.nodeStore.update((store) => {
-                let newLinkedNodeIds: NodeIdAndTag[] = [];
+                let newLinkedNodeIds: NodeIdAndMetaTag[] = [];
                 if (store.status === "complete") {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
-                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndTag) => {
-                  if (!containsNodeIdAndTag(newLinkedNodeIds, nodeIdAndTag)) {
-                    newLinkedNodeIds.push(nodeIdAndTag);
+                nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndMetaTag) => {
+                  if (!containsNodeIdAndTag(newLinkedNodeIds, {
+                    node_id: nodeIdAndMetaTag.node_id,
+                    tag: nodeIdAndMetaTag.meta_tag.tag,
+                  })) {
+                    newLinkedNodeIds.push(nodeIdAndMetaTag);
                   }
                 });
                 return {
@@ -578,7 +604,7 @@ export class SimpleHolochain {
       ...agentStoresToPoll,
       ...thingStoresToPoll,
     ];
-    console.log("Nodes to poll: ", nodesToPoll);
+    // console.log("Nodes to poll: ", nodesToPoll);
     const nodesAndLinkedIds = await this.batchGetNodeAndLinkedNodeIds(
       nodesToPoll
     );
@@ -685,7 +711,7 @@ export class SimpleHolochain {
    * @param src
    * @returns
    */
-  async getAllLinkedNodeIds(src: NodeId): Promise<NodeIdAndTag[]> {
+  async getAllLinkedNodeIds(src: NodeId): Promise<NodeIdAndMetaTag[]> {
     return this.callZome("get_all_linked_node_ids", src);
   }
 
@@ -837,7 +863,9 @@ function areNodeAndTagEqual(
 ): boolean {
   if (nodeId_a.node_id.type !== nodeId_b.node_id.type) return false;
   const bothUint8Array = !!nodeId_a.tag && !!nodeId_b.tag;
-  const tagsEqual = bothUint8Array ? areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag) : !nodeId_a.tag && !nodeId_b.tag;
+  const tagsEqual = bothUint8Array
+    ? areUint8ArrayEqual(nodeId_a.tag, nodeId_b.tag)
+    : !nodeId_a.tag && !nodeId_b.tag;
 
   if (nodeId_a.node_id.type === "Agent" && nodeId_b.node_id.type === "Agent")
     return (
@@ -847,7 +875,7 @@ function areNodeAndTagEqual(
   if (nodeId_a.node_id.type === "Thing" && nodeId_b.node_id.type === "Thing")
     return (
       encodeHashToBase64(nodeId_a.node_id.id) ===
-      encodeHashToBase64(nodeId_b.node_id.id) && tagsEqual
+        encodeHashToBase64(nodeId_b.node_id.id) && tagsEqual
     );
   if (nodeId_a.node_id.type === "Anchor" && nodeId_b.node_id.type === "Anchor")
     return nodeId_a.node_id.id === nodeId_b.node_id.id && tagsEqual;
@@ -855,11 +883,16 @@ function areNodeAndTagEqual(
 }
 
 function containsNodeIdAndTag(
-  arr: NodeIdAndTag[],
+  arr: NodeIdAndMetaTag[],
   nodeIdAndTag: NodeIdAndTag
 ): boolean {
   for (const id of arr) {
-    if (areNodeAndTagEqual(id, nodeIdAndTag)) {
+    if (
+      areNodeAndTagEqual(
+        { node_id: id.node_id, tag: id.meta_tag.tag },
+        nodeIdAndTag
+      )
+    ) {
       return true;
     }
   }

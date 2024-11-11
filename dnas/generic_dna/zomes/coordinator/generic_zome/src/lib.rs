@@ -21,6 +21,14 @@ pub fn init() -> ExternResult<InitCallbackResult> {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NodeLinkMeta {
+    src: NodeId,
+    dst: NodeId,
+    meta_tag: LinkTagContent,
+    create_action_hash: ActionHash,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NodeLink {
     src: NodeId,
     dst: NodeId,
@@ -60,7 +68,7 @@ pub enum SignalKind {
         id: ActionHash,
     },
     LinksCreated {
-        links: Vec<NodeLink>,
+        links: Vec<NodeLinkMeta>,
     },
     LinksDeleted {
         links: Vec<NodeLink>,
@@ -111,7 +119,7 @@ pub fn add_agent_to_anchor(_: ()) -> ExternResult<ActionHash> {
         path.path_entry_hash()?,
         my_agent_pubkey.clone(),
         LinkTypes::ToAgent,
-        derive_link_tag(None, None, NodeId::Agent(my_agent_pubkey))?,
+        derive_link_tag(None, None, NodeId::Agent(my_agent_pubkey), None)?.0,
     )
 }
 
@@ -119,14 +127,21 @@ pub fn derive_link_tag(
     input: Option<Vec<u8>>,
     backlink_action_hash: Option<ActionHash>,
     target_node_id: NodeId,
-) -> ExternResult<LinkTag> {
+    thing_created_at: Option<Timestamp>,
+) -> ExternResult<(LinkTag, LinkTagContent)> {
+    if let NodeId::Thing(_) = target_node_id {
+        if let None = thing_created_at {
+            return Err(wasm_error!(WasmErrorInner::Guest("To derive a link tag of type 'Thing', the thing_created_at field must be provided.".into())));
+        }
+    }
     let link_tag_content = LinkTagContent {
         tag: input,
         backlink_action_hash,
         target_node_id,
+        thing_created_at,
     };
-    let serialized_content = serialize_link_tag(link_tag_content)?;
-    Ok(LinkTag::from(serialized_content))
+    let serialized_content = serialize_link_tag(link_tag_content.clone())?;
+    Ok((LinkTag::from(serialized_content), link_tag_content))
 }
 
 // /// Whenever an action is committed, we emit a signal to the UI elements to reactively update them
