@@ -120,7 +120,7 @@ export class NodeStore {
     );
 
     let linkedNodeIds = await this.client.getAllLinkedNodeIds(this.nodeId);
-    console.log("@pollStore: Linked node ids: ", linkedNodeIds);
+    // console.log("@pollStore: Linked node ids: ", linkedNodeIds);
 
     if (this.nodeId.type === "Thing") {
       const latestThing = await this.client.getThing(this.nodeId.id);
@@ -456,7 +456,6 @@ export class SimpleHolochain {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
                 nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndMetaTag) => {
-                  console.log("Got nodeIdAndMetaTag: ", nodeIdAndMetaTag);
                   if (
                     !containsNodeIdAndTag(newLinkedNodeIds, {
                       node_id: nodeIdAndMetaTag.node_id,
@@ -605,7 +604,7 @@ export class SimpleHolochain {
       ...agentStoresToPoll,
       ...thingStoresToPoll,
     ];
-    console.log("Nodes to poll: ", nodesToPoll);
+    // console.log("Nodes to poll: ", nodesToPoll);
     const nodesAndLinkedIds = await this.batchGetNodeAndLinkedNodeIds(
       nodesToPoll
     );
@@ -862,7 +861,6 @@ function areNodeAndTagEqual(
   nodeId_a: NodeIdAndTag,
   nodeId_b: NodeIdAndTag
 ): boolean {
-  console.log("nodeId_a, nodeId_b: ", nodeId_a, nodeId_b);
   if (nodeId_a.node_id.type !== nodeId_b.node_id.type) return false;
   const bothUint8Array = !!nodeId_a.tag && !!nodeId_b.tag;
   const tagsEqual = bothUint8Array
