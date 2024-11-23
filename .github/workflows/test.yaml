@@ -22,4 +22,4 @@ jobs:
 
       - name: Install and test
         run: |
-          nix develop --command bash -c "npm install && npm run test"
+          nix develop --command bash -c "npm install && npm run build:lib && npm run test"
