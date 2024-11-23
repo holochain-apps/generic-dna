@@ -417,3 +417,76 @@ test("Create Thing and an anchor, then delete the thing and the anchor link", as
     assert(linkedThingIds2.length === 0);
   });
 });
+
+
+test("Create Thing and an anchor, then IMMEDIATELY delete the thing and the anchor link", async () => {
+  await runScenario(async (scenario) => {
+    // Construct proper paths for your app.
+    // This assumes app bundle created by the `hc app pack` command.
+    const testAppPath = process.cwd() + "/../workdir/generic-dna.happ";
+
+    // Set up the app to be installed
+    const appSource = { appBundleSource: { path: testAppPath } };
+
+    // Add 2 players with the test app to the Scenario. The returned players
+    // can be destructured.
+    const [alice, bob] = await scenario.addPlayersWithApps([
+      appSource,
+      appSource,
+    ]);
+
+    // Shortcut peer discovery through gossip and register all agents in every
+    // conductor of the scenario.
+    await scenario.shareAllAgents();
+
+    const aliceCell = getCellByRoleName(alice, "generic_dna");
+    const bobCell = getCellByRoleName(bob, "generic_dna");
+
+    // Alice creates a Thing and a bidirectional link to her agent anchor
+    const allThingsAnchor: NodeId = {
+      type: "Anchor",
+      id: "ALL_THINGS",
+    };
+    let linkInput: LinkInput = {
+      direction: LinkDirection.From,
+      node_id: allThingsAnchor,
+    };
+    const thingInput: CreateThingInput = {
+      content: "hello",
+      links: [linkInputToRustFormat(linkInput)],
+    };
+    const thing: Thing = await aliceCell.callZome({
+      zome_name: "generic_zome",
+      fn_name: "create_thing",
+      payload: thingInput,
+    });
+
+    // const thingNode: NodeId = { type: "Thing", id: thing.id };
+
+    // IMMEDIATELY have Bob delete it without dht sync to check that deletion works also if the link
+    // has only been propagated via remote signals
+    const deleteThingInput: DeleteThingInput = {
+      thing_id: thing.id,
+      delete_backlinks: false,
+      delete_links_from_creator: false,
+      delete_links: [linkInputToRustFormat(linkInput)],
+    };
+    await bobCell.callZome({
+      zome_name: "generic_zome",
+      fn_name: "delete_thing",
+      payload: deleteThingInput,
+    });
+
+    // - Check that Alice cannot find it anymore
+    await dhtSync([alice, bob], aliceCell.cell_id[0]);
+
+    // Get the links pointing towards the thing node from the ALL_THINGS anchor
+    const linkedNodes: NodeContent[] = await aliceCell.callZome({
+      zome_name: "generic_zome",
+      fn_name: "get_all_linked_nodes",
+      payload: allThingsAnchor,
+    });
+
+    assert(linkedNodes.length === 0);
+  });
+});

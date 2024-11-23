@@ -222,7 +222,7 @@ export class SimpleHolochain {
     // TODO set up signal listener. Potentially emit signal to conductor
     this.zomeClient.onSignal(async (s) => {
       if (s.type === "Remote") {
-        console.log("Got remote signal!");
+        console.log("Got remote signal!", s);
       }
       let signal = s.content;
       switch (signal.type) {
@@ -323,6 +323,7 @@ export class SimpleHolochain {
             nodeStore.nodeStore.update((store) => {
               if (store.status === "complete") {
                 const currentLinkedNodeIds = store.value.linkedNodeIds;
+                console.log("currentLinkedNodeIds: ",currentLinkedNodeIds);
                 store.value.linkedNodeIds = currentLinkedNodeIds.filter(
                   (nodeIdAndMetaTag) =>
                     !areNodeAndTagEqual(
@@ -333,6 +334,7 @@ export class SimpleHolochain {
                       }
                     )
                 );
+                console.log("store.value.linkedNodeIds: ", store.value.linkedNodeIds);
               }
               return store;
             });
@@ -609,6 +611,7 @@ export class SimpleHolochain {
     const nodesAndLinkedIds = await this.batchGetNodeAndLinkedNodeIds(
       nodesToPoll
     );
+    console.log("@pollStores: got nodesAndLinkedIds: ", nodesAndLinkedIds);
     this.nodeContentsToStore(nodesAndLinkedIds, allowDelete);
   }
 
