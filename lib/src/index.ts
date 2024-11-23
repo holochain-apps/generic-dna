@@ -30,9 +30,9 @@ import {
   Thing,
   ThingId,
   UpdateThingInput,
-} from "./types";
+} from "./types.js";
 
-export * from "./types";
+export * from "./types.js";
 
 import {
   derived,
@@ -129,11 +129,12 @@ export class NodeStore {
         // If it is already complete, we assume that the Thing arrived through emit_signal
         // otherwise we set it to "error"
         if (currentThing.status !== "complete") {
+          console.log("currentThing.status: ", currentThing.status);
           this.nodeStore.set({
             status: "error",
             error: `Failed to get Thing record for thing with id ${encodeHashToBase64(
               this.nodeId.id
-            )}`,
+            )}${currentThing.status === "error" ? currentThing.error : ''}`,
           });
         }
         return;
@@ -827,7 +828,7 @@ export class SimpleHolochain {
   }
 }
 
-function linkInputToRustFormat(linkInput: LinkInput): LinkInputRust {
+export function linkInputToRustFormat(linkInput: LinkInput): LinkInputRust {
   let linkDirection: LinkDirectionRust;
   switch (linkInput.direction) {
     case LinkDirection.From:

@@ -9,6 +9,7 @@ import { simpleHolochainContext } from '../contexts';
 import {
   AsyncStatus,
   NodeId,
+  NodeIdAndMetaTag,
   NodeStoreContent,
   SimpleHolochain,
 } from '@holochain/simple-holochain';
@@ -41,11 +42,11 @@ export class AllPosts extends LitElement {
     if (this.nodeStoreUnsubscriber) this.nodeStoreUnsubscriber();
   }
 
-  renderNodes(nodeIds: NodeId[]) {
-    const thingNodes = nodeIds.filter(nodeId => nodeId.type === 'Thing');
+  renderNodes(nodeIdAndMetas: NodeIdAndMetaTag[]) {
+    const thingNodes = nodeIdAndMetas.filter(idAndMeta => idAndMeta.node_id.type === 'Thing');
     console.log('Rendering thingNodes: ', thingNodes);
     return thingNodes.map(
-      node => html` <post-detail .thingHash=${node.id}></post-detail> `
+      idAndMeta => html` <post-detail .thingHash=${idAndMeta.node_id.id}></post-detail> `
     );
   }
 

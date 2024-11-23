@@ -1,6 +1,5 @@
 use crate::{derive_link_tag, NodeLink, NodeLinkMeta, Signal, SignalKind, Thing};
 use generic_zome_integrity::*;
-use hdi::prelude::holochain_integrity_types::action;
 use hdk::prelude::*;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -103,19 +102,25 @@ pub fn create_thing(input: CreateThingInput) -> ExternResult<Thing> {
 /// Gets the latest known version of a Thing
 #[hdk_extern]
 pub fn get_latest_thing(thing_id: ActionHash) -> ExternResult<Option<Thing>> {
-    let links = get_links(
-        GetLinksInputBuilder::try_new(thing_id.clone(), LinkTypes::ThingUpdates)?.build(),
-    )?;
-    let thing_record = get_latest_thing_from_links(links)?;
-    match thing_record {
-        Some(r) => Ok(Some(thing_record_to_thing(r)?)),
-        None => {
-            let maybe_original_record = get(thing_id, GetOptions::default())?;
-            match maybe_original_record {
-                Some(r) => Ok(Some(thing_record_to_thing(r)?)),
-                None => Ok(None),
+    let original_thing = get_original_thing(thing_id.clone())?;
+    match original_thing {
+        Some(thing) => {
+            let links = get_links(
+                GetLinksInputBuilder::try_new(thing_id.clone(), LinkTypes::ThingUpdates)?.build(),
+            )?;
+            let thing_record = get_latest_thing_from_links(links)?;
+            match thing_record {
+                Some(r) => Ok(Some(thing_record_to_thing(r, thing)?)),
+                None => {
+                    let maybe_original_record = get(thing_id, GetOptions::default())?;
+                    match maybe_original_record {
+                        Some(r) => Ok(Some(thing_record_to_thing(r, thing)?)),
+                        None => Ok(None),
+                    }
+                }
             }
         }
+        None => Ok(None),
     }
 }
 
@@ -149,7 +154,7 @@ pub fn get_original_thing(original_thing_id: ActionHash) -> ExternResult<Option<
     let maybe_thing_record = get(original_thing_id.clone(), GetOptions::default())?;
     match maybe_thing_record {
         Some(record) => {
-            let thing = thing_record_to_thing(record)?;
+            let thing = original_thing_record_to_thing(record)?;
             Ok(Some(thing))
         }
         None => Ok(None),
@@ -158,9 +163,9 @@ pub fn get_original_thing(original_thing_id: ActionHash) -> ExternResult<Option<
 
 #[hdk_extern]
 pub fn get_all_revisions_for_thing(thing_id: ActionHash) -> ExternResult<Vec<Thing>> {
-    let Some(original_record) = get(thing_id.clone(), GetOptions::default())? else {
+    let Some(original_thing) = get_original_thing(thing_id.clone())? else {
         return Err(wasm_error!(WasmErrorInner::Guest(
-            "No original record found for this thing_id (action hash).".into()
+            "No original Thing found for this thing_id (action hash).".into()
         )));
     };
     let links = get_links(
@@ -181,13 +186,14 @@ pub fn get_all_revisions_for_thing(thing_id: ActionHash) -> ExternResult<Vec<Thi
         })
         .collect::<ExternResult<Vec<GetInput>>>()?;
     let records = HDK.with(|hdk| hdk.borrow().get(get_input))?;
-    let mut records: Vec<Record> = records.into_iter().flatten().collect();
-    records.insert(0, original_record);
-    Ok(records
+    let records: Vec<Record> = records.into_iter().flatten().collect();
+    let mut things = records
         .into_iter()
-        .map(|r| thing_record_to_thing(r).ok())
+        .map(|r| thing_record_to_thing(r, original_thing.clone()).ok())
         .filter_map(|t| t)
-        .collect())
+        .collect::<Vec<Thing>>();
+    things.insert(0, original_thing);
+    Ok(things)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -198,13 +204,17 @@ pub struct UpdateThingInput {
 
 #[hdk_extern]
 pub fn update_thing(input: UpdateThingInput) -> ExternResult<Thing> {
-    let updated_thing_hash = create_entry(&EntryTypes::Thing(ThingEntry {
-        content: input.updated_content.clone(),
-    }))?;
+    let original_thing_record =
+        get(input.thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
+            WasmErrorInner::Guest("Failed to get record of original Thing.".into())
+        ))?;
 
-    let thing_record = get(input.thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
-        WasmErrorInner::Guest("Failed to get record of original Thing.".into())
-    ))?;
+    let updated_thing_hash = update_entry(
+        input.thing_id.clone(),
+        &EntryTypes::Thing(ThingEntry {
+            content: input.updated_content.clone(),
+        }),
+    )?;
 
     let updated_thing_record = get(updated_thing_hash.clone(), GetOptions::default())?.ok_or(
         wasm_error!(WasmErrorInner::Guest(
@@ -222,8 +232,8 @@ pub fn update_thing(input: UpdateThingInput) -> ExternResult<Thing> {
     let thing = Thing {
         id: input.thing_id,
         content: input.updated_content,
-        creator: thing_record.action().author().clone(),
-        created_at: thing_record.action().timestamp(),
+        creator: original_thing_record.action().author().clone(),
+        created_at: original_thing_record.action().timestamp(),
         updated_at: Some(updated_thing_record.action().timestamp()),
     };
 
@@ -263,7 +273,7 @@ pub fn delete_thing(input: DeleteThingInput) -> ExternResult<()> {
     // not retreivable without the original Thing entry)
     delete_entry(input.thing_id.clone())?;
 
-    // 2. Delete all backlinks from bidirectional links
+    // 2. Delete all backlinks from bidirectional links. We do NOT delete links pointing away from it.
     if input.delete_backlinks {
         let links_to_agents = get_links(
             GetLinksInputBuilder::try_new(input.thing_id.clone(), LinkTypes::ToAgent)?.build(),
@@ -559,12 +569,57 @@ pub fn delete_links_from_node(input: CreateOrDeleteLinksInput) -> ExternResult<(
 }
 
 fn delete_links_from_node_inner(input: CreateOrDeleteLinksInput) -> ExternResult<Vec<NodeLink>> {
-    let base = linkable_hash_from_node_id(input.src.clone())?;
-
     let mut links_deleted: Vec<NodeLink> = Vec::new();
 
-    let anchor_link_inputs = input
+    // Discern between "From" links and "To" or "Bidirectional" links
+    let from_links = input
         .links
+        .clone()
+        .into_iter()
+        .filter_map(|l| match l.direction {
+            LinkDirection::From => Some(l),
+            _ => None,
+        })
+        .collect::<Vec<LinkInput>>();
+
+    for link_input in from_links {
+        let base = linkable_hash_from_node_id(link_input.node_id)?;
+        let link_type = match input.src {
+            NodeId::Agent(_) => LinkTypes::ToAgent,
+            NodeId::Anchor(_) => LinkTypes::ToAnchor,
+            NodeId::Thing(_) => LinkTypes::ToThing,
+        };
+        let links_to_base =
+            get_links(GetLinksInputBuilder::try_new(base.clone(), link_type)?.build())?;
+        for link in links_to_base {
+            if link.target == base {
+                delete_link(link.create_link_hash)?;
+            }
+        }
+    }
+
+    let to_or_bidirectional_links = input
+        .links
+        .clone()
+        .into_iter()
+        .filter_map(|l| match l.direction {
+            LinkDirection::From => None,
+            _ => Some(l),
+        })
+        .collect::<Vec<LinkInput>>();
+
+    // Delete "To" and "Bidirectional" links
+    let anchor_link_inputs = to_or_bidirectional_links
+        .clone()
+        .into_iter()
+        .map(|l| match l.node_id {
+            NodeId::Anchor(_) => Some(l),
+            _ => None,
+        })
+        .filter_map(|l| l)
+        .collect::<Vec<LinkInput>>();
+
+    let agent_link_inputs = to_or_bidirectional_links
         .clone()
         .into_iter()
         .map(|l| match l.node_id {
@@ -574,27 +629,17 @@ fn delete_links_from_node_inner(input: CreateOrDeleteLinksInput) -> ExternResult
         .filter_map(|l| l)
         .collect::<Vec<LinkInput>>();
 
-    let agent_link_inputs = input
-        .links
+    let thing_link_inputs = to_or_bidirectional_links
         .clone()
         .into_iter()
         .map(|l| match l.node_id {
-            NodeId::Agent(_) => Some(l),
+            NodeId::Thing(_) => Some(l),
             _ => None,
         })
         .filter_map(|l| l)
         .collect::<Vec<LinkInput>>();
 
-    let thing_link_inputs = input
-        .links
-        .clone()
-        .into_iter()
-        .map(|l| match l.node_id {
-            NodeId::Agent(_) => Some(l),
-            _ => None,
-        })
-        .filter_map(|l| l)
-        .collect::<Vec<LinkInput>>();
+    let base = linkable_hash_from_node_id(input.src.clone())?;
 
     if anchor_link_inputs.len() > 0 {
         for link_input in anchor_link_inputs {
@@ -956,7 +1001,32 @@ fn linkable_hash_from_node_id(node_id: NodeId) -> ExternResult<AnyLinkableHash> 
     }
 }
 
-fn thing_record_to_thing(record: Record) -> ExternResult<Thing> {
+fn thing_record_to_thing(record: Record, original_thing: Thing) -> ExternResult<Thing> {
+    let thing_entry = record
+    .entry()
+    .to_app_option::<ThingEntry>()
+    .map_err(|e| {
+        wasm_error!(WasmErrorInner::Guest(
+            format!("Failed to deserialize Record at the given action hash (thing_id) to a ThingEntry: {e}")
+        ))
+    })?
+    .ok_or(wasm_error!(WasmErrorInner::Guest(
+        "No Thing associated to this thing id (AcionHash).".into()
+    )))?;
+    let updated_at = match record.action_address() == &original_thing.id {
+        true => None,
+        false => Some(record.action().timestamp()),
+    };
+    Ok(Thing {
+        id: record.action_address().clone(),
+        content: thing_entry.content,
+        creator: original_thing.creator,
+        created_at: original_thing.created_at,
+        updated_at,
+    })
+}
+
+fn original_thing_record_to_thing(record: Record) -> ExternResult<Thing> {
     let thing_entry = record
     .entry()
     .to_app_option::<ThingEntry>()
