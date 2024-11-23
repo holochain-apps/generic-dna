@@ -119,7 +119,7 @@ pub fn add_agent_to_anchor(_: ()) -> ExternResult<ActionHash> {
         path.path_entry_hash()?,
         my_agent_pubkey.clone(),
         LinkTypes::ToAgent,
-        derive_link_tag(None, None, NodeId::Agent(my_agent_pubkey), None)?.0,
+        derive_link_tag(None, None, NodeId::Agent(my_agent_pubkey), None, None)?.0,
     )
 }
 
@@ -128,10 +128,14 @@ pub fn derive_link_tag(
     backlink_action_hash: Option<ActionHash>,
     target_node_id: NodeId,
     thing_created_at: Option<Timestamp>,
+    thing_created_by: Option<AgentPubKey>,
 ) -> ExternResult<(LinkTag, LinkTagContent)> {
     if let NodeId::Thing(_) = target_node_id {
         if let None = thing_created_at {
             return Err(wasm_error!(WasmErrorInner::Guest("To derive a link tag of type 'Thing', the thing_created_at field must be provided.".into())));
+        }
+        if let None = thing_created_by {
+            return Err(wasm_error!(WasmErrorInner::Guest("To derive a link tag of type 'Thing', the thing_created_by field must be provided.".into())));
         }
     }
     let link_tag_content = LinkTagContent {
@@ -139,6 +143,7 @@ pub fn derive_link_tag(
         backlink_action_hash,
         target_node_id,
         thing_created_at,
+        thing_created_by,
     };
     let serialized_content = serialize_link_tag(link_tag_content.clone())?;
     Ok((LinkTag::from(serialized_content), link_tag_content))

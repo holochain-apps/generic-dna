@@ -746,7 +746,7 @@ fn create_link_from_node_by_id(
         NodeId::Agent(agent) => match link.direction {
             LinkDirection::To => {
                 let (link_tag, link_tag_content) =
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                    derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None, None)?;
                 let ah = create_link(base.clone(), agent, LinkTypes::ToAgent, link_tag)?;
                 Ok((
                     NodeLinkMeta {
@@ -759,8 +759,28 @@ fn create_link_from_node_by_id(
                 ))
             }
             LinkDirection::From => {
-                let (link_tag, link_tag_content) =
-                    derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                let (src_thing_created_at, src_thing_created_by) = match src.clone() {
+                    NodeId::Thing(thing_id) => {
+                        let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
+                            WasmErrorInner::Guest(format!(
+                            "Record of Thing to link from not found. Tried to link to thing with id {}",
+                            ActionHashB64::from(thing_id)
+                        ))
+                        ))?;
+                        (
+                            Some(thing_record.action().timestamp()),
+                            Some(thing_record.action().author().clone()),
+                        )
+                    }
+                    _ => (None, None),
+                };
+                let (link_tag, link_tag_content) = derive_link_tag(
+                    link.tag.clone(),
+                    None,
+                    link.node_id.clone(),
+                    src_thing_created_at,
+                    src_thing_created_by,
+                )?;
                 let ah = create_link(agent, base.clone(), LinkTypes::ToThing, link_tag)?;
                 Ok((
                     NodeLinkMeta {
@@ -773,7 +793,7 @@ fn create_link_from_node_by_id(
                 ))
             }
             LinkDirection::Bidirectional => {
-                let src_thing_created_at = match src.clone() {
+                let (src_thing_created_at, src_thing_created_by) = match src.clone() {
                     NodeId::Thing(thing_id) => {
                         let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
                             WasmErrorInner::Guest(format!(
@@ -781,12 +801,20 @@ fn create_link_from_node_by_id(
                             ActionHashB64::from(thing_id)
                         ))
                         ))?;
-                        Some(thing_record.action().timestamp())
+                        (
+                            Some(thing_record.action().timestamp()),
+                            Some(thing_record.action().author().clone()),
+                        )
                     }
-                    _ => None,
+                    _ => (None, None),
                 };
-                let (link_tag_backlink, link_tag_content_backlink) =
-                    derive_link_tag(link.tag.clone(), None, src.clone(), src_thing_created_at)?;
+                let (link_tag_backlink, link_tag_content_backlink) = derive_link_tag(
+                    link.tag.clone(),
+                    None,
+                    src.clone(),
+                    src_thing_created_at,
+                    src_thing_created_by,
+                )?;
                 let backlink_action_hash = create_link(
                     agent.clone(),
                     base.clone(),
@@ -797,6 +825,7 @@ fn create_link_from_node_by_id(
                     link.tag.clone(),
                     Some(backlink_action_hash.clone()),
                     link.node_id.clone(),
+                    None,
                     None,
                 )?;
 
@@ -823,7 +852,7 @@ fn create_link_from_node_by_id(
             match link.direction {
                 LinkDirection::To => {
                     let (link_tag, link_tag_content) =
-                        derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                        derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None, None)?;
                     let ah =
                         create_link(base.clone(), path_entry_hash, LinkTypes::ToAnchor, link_tag)?;
                     Ok((
@@ -837,8 +866,28 @@ fn create_link_from_node_by_id(
                     ))
                 }
                 LinkDirection::From => {
-                    let (link_tag, link_tag_content) =
-                        derive_link_tag(link.tag.clone(), None, link.node_id.clone(), None)?;
+                    let (src_thing_created_at, src_thing_created_by) = match src.clone() {
+                        NodeId::Thing(thing_id) => {
+                            let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
+                                WasmErrorInner::Guest(format!(
+                                "Record of Thing to link from not found. Tried to link to thing with id {}",
+                                ActionHashB64::from(thing_id)
+                            ))
+                            ))?;
+                            (
+                                Some(thing_record.action().timestamp()),
+                                Some(thing_record.action().author().clone()),
+                            )
+                        }
+                        _ => (None, None),
+                    };
+                    let (link_tag, link_tag_content) = derive_link_tag(
+                        link.tag.clone(),
+                        None,
+                        link.node_id.clone(),
+                        src_thing_created_at,
+                        src_thing_created_by,
+                    )?;
                     let ah =
                         create_link(path_entry_hash, base.clone(), LinkTypes::ToThing, link_tag)?;
                     Ok((
@@ -852,7 +901,7 @@ fn create_link_from_node_by_id(
                     ))
                 }
                 LinkDirection::Bidirectional => {
-                    let src_thing_created_at = match src.clone() {
+                    let (src_thing_created_at, src_thing_created_by) = match src.clone() {
                         NodeId::Thing(thing_id) => {
                             let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
                                 WasmErrorInner::Guest(format!(
@@ -860,12 +909,20 @@ fn create_link_from_node_by_id(
                                 ActionHashB64::from(thing_id)
                             ))
                             ))?;
-                            Some(thing_record.action().timestamp())
+                            (
+                                Some(thing_record.action().timestamp()),
+                                Some(thing_record.action().author().clone()),
+                            )
                         }
-                        _ => None,
+                        _ => (None, None),
                     };
-                    let (link_tag_backlink, link_tag_content_backlink) =
-                        derive_link_tag(link.tag.clone(), None, src.clone(), src_thing_created_at)?;
+                    let (link_tag_backlink, link_tag_content_backlink) = derive_link_tag(
+                        link.tag.clone(),
+                        None,
+                        src.clone(),
+                        src_thing_created_at,
+                        src_thing_created_by,
+                    )?;
                     let backlink_action_hash = create_link(
                         path_entry_hash.clone(),
                         base.clone(),
@@ -876,6 +933,7 @@ fn create_link_from_node_by_id(
                         link.tag.clone(),
                         Some(backlink_action_hash.clone()),
                         link.node_id.clone(),
+                        None,
                         None,
                     )?;
                     let ah =
@@ -911,6 +969,7 @@ fn create_link_from_node_by_id(
                         None,
                         link.node_id.clone(),
                         Some(thing_record.action().timestamp()),
+                        Some(thing_record.action().author().clone()),
                     )?;
                     let ah = create_link(
                         base.clone(),
@@ -929,11 +988,27 @@ fn create_link_from_node_by_id(
                     ))
                 }
                 LinkDirection::From => {
+                    let (src_thing_created_at, src_thing_created_by) = match src.clone() {
+                        NodeId::Thing(thing_id) => {
+                            let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
+                                WasmErrorInner::Guest(format!(
+                                "Record of Thing to link from not found. Tried to link to thing with id {}",
+                                ActionHashB64::from(thing_id)
+                            ))
+                            ))?;
+                            (
+                                Some(thing_record.action().timestamp()),
+                                Some(thing_record.action().author().clone()),
+                            )
+                        }
+                        _ => (None, None),
+                    };
                     let (link_tag, link_tag_content) = derive_link_tag(
                         link.tag.clone(),
                         None,
                         link.node_id.clone(),
-                        Some(thing_record.action().timestamp()),
+                        src_thing_created_at,
+                        src_thing_created_by,
                     )?;
                     let ah = create_link(action_hash, base.clone(), LinkTypes::ToThing, link_tag)?;
                     Ok((
@@ -947,19 +1022,28 @@ fn create_link_from_node_by_id(
                     ))
                 }
                 LinkDirection::Bidirectional => {
-                    let src_thing_created_at = match src.clone() {
+                    let (src_thing_created_at, src_thing_created_by) = match src.clone() {
                         NodeId::Thing(thing_id) => {
-                            let thing_record = get(thing_id.clone(), GetOptions::default())?
-                                .ok_or(wasm_error!(WasmErrorInner::Guest(format!(
-                        "Record of Thing to link from not found. Tried to link to thing with id {}",
-                        ActionHashB64::from(thing_id)
-                    ))))?;
-                            Some(thing_record.action().timestamp())
+                            let thing_record = get(thing_id.clone(), GetOptions::default())?.ok_or(wasm_error!(
+                                WasmErrorInner::Guest(format!(
+                                "Record of Thing to link from not found. Tried to link to thing with id {}",
+                                ActionHashB64::from(thing_id)
+                            ))
+                            ))?;
+                            (
+                                Some(thing_record.action().timestamp()),
+                                Some(thing_record.action().author().clone()),
+                            )
                         }
-                        _ => None,
+                        _ => (None, None),
                     };
-                    let (link_tag_backlink, link_tag_content_backlink) =
-                        derive_link_tag(link.tag.clone(), None, src.clone(), src_thing_created_at)?;
+                    let (link_tag_backlink, link_tag_content_backlink) = derive_link_tag(
+                        link.tag.clone(),
+                        None,
+                        src.clone(),
+                        src_thing_created_at,
+                        src_thing_created_by,
+                    )?;
                     let backlink_action_hash = create_link(
                         action_hash.clone(),
                         base.clone(),
@@ -971,6 +1055,7 @@ fn create_link_from_node_by_id(
                         Some(backlink_action_hash.clone()),
                         link.node_id.clone(),
                         Some(thing_record.action().timestamp()),
+                        Some(thing_record.action().author().clone()),
                     )?;
                     let ah = create_link(base.clone(), action_hash, LinkTypes::ToThing, link_tag)?;
                     Ok((

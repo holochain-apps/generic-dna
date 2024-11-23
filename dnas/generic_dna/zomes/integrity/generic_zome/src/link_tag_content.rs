@@ -17,6 +17,9 @@ pub struct LinkTagContent {
     /// If it's a link pointing to a Thing then this contains the timestamp
     /// of when the Thing was originally created
     pub thing_created_at: Option<Timestamp>,
+    /// If it's a link pointing to a Thing then this contains the creator's
+    /// public key
+    pub thing_created_by: Option<AgentPubKey>,
 }
 
 pub fn serialize_link_tag(link_tag_content: LinkTagContent) -> ExternResult<Vec<u8>> {

@@ -80,10 +80,10 @@ export type EntryTypes = { type: "Thing" } & ThingEntry;
 
 export type ThingEntry = {
   content: string;
-}
+};
 
 export type LinkTagContent = {
-  tag: Uint8Array | undefined,
+  tag: Uint8Array | undefined;
   // action hash of the backlink. Used to efficiently delete the backlink
   // without having to do a get_links and filter by link targets.
   // This seems worth it since relationship tags may potentially be
@@ -96,7 +96,10 @@ export type LinkTagContent = {
   /// If it's a link pointing to a Thing then this contains the timestamp
   /// of when the Thing was originally created
   thing_created_at: number | undefined;
-}
+  /// If it's a link pointing to a Thing then this contains the creator's
+  /// public key
+  thing_created_by: AgentPubKey | undefined;
+};
 
 export type NodeLinkMeta = {
   src: NodeId;
