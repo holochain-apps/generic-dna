@@ -742,6 +742,11 @@ fn create_link_from_node_by_id(
     link: LinkInput,
 ) -> ExternResult<(NodeLinkMeta, Option<NodeLinkMeta>)> {
     let base: HoloHash<hash_type::AnyLinkable> = linkable_hash_from_node_id(src.clone())?;
+    let base_link_type = match src.clone() {
+        NodeId::Agent(_) => LinkTypes::ToAgent,
+        NodeId::Anchor(_) => LinkTypes::ToAnchor,
+        NodeId::Thing(_) => LinkTypes::ToThing,
+    };
     match link.node_id.clone() {
         NodeId::Agent(agent) => match link.direction {
             LinkDirection::To => {
@@ -781,7 +786,7 @@ fn create_link_from_node_by_id(
                     src_thing_created_at,
                     src_thing_created_by,
                 )?;
-                let ah = create_link(agent, base.clone(), LinkTypes::ToThing, link_tag)?;
+                let ah = create_link(agent, base.clone(), base_link_type, link_tag)?;
                 Ok((
                     NodeLinkMeta {
                         src,
@@ -818,7 +823,7 @@ fn create_link_from_node_by_id(
                 let backlink_action_hash = create_link(
                     agent.clone(),
                     base.clone(),
-                    LinkTypes::ToThing,
+                    base_link_type,
                     link_tag_backlink,
                 )?;
                 let (link_tag, link_tag_content) = derive_link_tag(
@@ -888,8 +893,7 @@ fn create_link_from_node_by_id(
                         src_thing_created_at,
                         src_thing_created_by,
                     )?;
-                    let ah =
-                        create_link(path_entry_hash, base.clone(), LinkTypes::ToThing, link_tag)?;
+                    let ah = create_link(path_entry_hash, base.clone(), base_link_type, link_tag)?;
                     Ok((
                         NodeLinkMeta {
                             src,
@@ -926,7 +930,7 @@ fn create_link_from_node_by_id(
                     let backlink_action_hash = create_link(
                         path_entry_hash.clone(),
                         base.clone(),
-                        LinkTypes::ToThing,
+                        base_link_type,
                         link_tag_backlink,
                     )?;
                     let (link_tag, link_tag_content) = derive_link_tag(
@@ -1010,7 +1014,7 @@ fn create_link_from_node_by_id(
                         src_thing_created_at,
                         src_thing_created_by,
                     )?;
-                    let ah = create_link(action_hash, base.clone(), LinkTypes::ToThing, link_tag)?;
+                    let ah = create_link(action_hash, base.clone(), base_link_type, link_tag)?;
                     Ok((
                         NodeLinkMeta {
                             src,
@@ -1047,7 +1051,7 @@ fn create_link_from_node_by_id(
                     let backlink_action_hash = create_link(
                         action_hash.clone(),
                         base.clone(),
-                        LinkTypes::ToThing,
+                        base_link_type,
                         link_tag_backlink,
                     )?;
                     let (link_tag, link_tag_content) = derive_link_tag(
