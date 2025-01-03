@@ -1,5 +1,5 @@
 {
-  "name": "@holochain/simple-holochain",
+  "name": "@matthme/simple-holochain",
   "version": "0.1.0",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -17,8 +17,8 @@
   },
   "type": "module",
   "dependencies": {
-    "@holochain/client": "0.18.0-rc.0",
-    "@holochain-open-dev/utils": "0.400.0-dev.4",
+    "@holochain/client": "0.18.0",
+    "@holochain-open-dev/utils": "0.400.0-rc.0",
     "svelte": "^3.38.3"
   },
   "devDependencies": {
