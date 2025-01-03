@@ -446,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "generic_zome"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "generic_zome_integrity",
  "hdk",
@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "generic_zome_integrity"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "hdi",
  "serde",
