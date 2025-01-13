@@ -1,5 +1,5 @@
 {
-  "name": "generic-dna-dev",
+  "name": "generic-dna",
   "private": true,
   "workspaces": [
     "lib",
