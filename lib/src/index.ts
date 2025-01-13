@@ -134,7 +134,7 @@ export class NodeStore {
             status: "error",
             error: `Failed to get Thing record for thing with id ${encodeHashToBase64(
               this.nodeId.id
-            )}${currentThing.status === "error" ? currentThing.error : ''}`,
+            )}${currentThing.status === "error" ? currentThing.error : ""}`,
           });
         }
         return;
@@ -180,6 +180,9 @@ export class NodeStore {
   };
 }
 
+const DEFAULT_ROLE = "generic_dna";
+const DEFAULT_ZOME = "generic_zome";
+
 export class SimpleHolochain {
   private client: AppClient;
   private zomeClient: ZomeClient<GenericZomeSignal>;
@@ -195,9 +198,10 @@ export class SimpleHolochain {
   private constructor(
     client: AppClient,
     zomeClient: ZomeClient<GenericZomeSignal>,
-    roleName: string = "generic_dna",
-    zomeName: string = "generic_zome"
+    roleName: string = DEFAULT_ROLE,
+    zomeName: string = DEFAULT_ZOME
   ) {
+    console.log("CONSTRUCTING SIMPLE HOLOCHAIN", roleName, zomeName);
     this.client = client;
     this.zomeClient = zomeClient;
     this.roleName = roleName;
@@ -323,7 +327,7 @@ export class SimpleHolochain {
             nodeStore.nodeStore.update((store) => {
               if (store.status === "complete") {
                 const currentLinkedNodeIds = store.value.linkedNodeIds;
-                console.log("currentLinkedNodeIds: ",currentLinkedNodeIds);
+                console.log("currentLinkedNodeIds: ", currentLinkedNodeIds);
                 store.value.linkedNodeIds = currentLinkedNodeIds.filter(
                   (nodeIdAndMetaTag) =>
                     !areNodeAndTagEqual(
@@ -334,7 +338,10 @@ export class SimpleHolochain {
                       }
                     )
                 );
-                console.log("store.value.linkedNodeIds: ", store.value.linkedNodeIds);
+                console.log(
+                  "store.value.linkedNodeIds: ",
+                  store.value.linkedNodeIds
+                );
               }
               return store;
             });
@@ -371,8 +378,14 @@ export class SimpleHolochain {
    */
   static async connect(
     appClient?: AppClient,
-    options: AppWebsocketConnectionOptions = {}
+    options: AppWebsocketConnectionOptions & {
+      role_name?: string;
+      zome_name?: string;
+    } = {}
   ) {
+    console.log("CONNECTING!", options);
+    const roleName = options.role_name || DEFAULT_ROLE;
+    const zomeName = options.zome_name || DEFAULT_ZOME;
     // We olny want one global instance of SimpleHolochain to omit accumulating poll intervals
     if (window.__SIMPLE_HOLOCHAIN__) return window.__SIMPLE_HOLOCHAIN__;
     if (!appClient) {
@@ -380,10 +393,15 @@ export class SimpleHolochain {
     }
     const zomeClient = new ZomeClient<GenericZomeSignal>(
       appClient,
-      "generic_dna",
-      "generic_zome"
+      roleName,
+      zomeName
     );
-    const simpleHolochain = new SimpleHolochain(appClient, zomeClient);
+    const simpleHolochain = new SimpleHolochain(
+      appClient,
+      zomeClient,
+      roleName,
+      zomeName
+    );
     // In case another SimpleHolochain got created while we were connecting to the appwebsocket, cancel
     if (window.__SIMPLE_HOLOCHAIN__) return window.__SIMPLE_HOLOCHAIN__;
     window.__SIMPLE_HOLOCHAIN__ = simpleHolochain;
@@ -555,10 +573,12 @@ export class SimpleHolochain {
                   newLinkedNodeIds = store.value.linkedNodeIds;
                 }
                 nodeAndLinkedIds.linked_node_ids.forEach((nodeIdAndMetaTag) => {
-                  if (!containsNodeIdAndTag(newLinkedNodeIds, {
-                    node_id: nodeIdAndMetaTag.node_id,
-                    tag: nodeIdAndMetaTag.meta_tag.tag,
-                  })) {
+                  if (
+                    !containsNodeIdAndTag(newLinkedNodeIds, {
+                      node_id: nodeIdAndMetaTag.node_id,
+                      tag: nodeIdAndMetaTag.meta_tag.tag,
+                    })
+                  ) {
                     newLinkedNodeIds.push(nodeIdAndMetaTag);
                   }
                 });
