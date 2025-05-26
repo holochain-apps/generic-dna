@@ -1,11 +1,7 @@
 import { assert, test } from "vitest";
 
-import {
-  ActionHash,
-  AgentPubKey,
-  encodeHashToBase64,
-} from "@holochain/client";
-import { dhtSync, runScenario } from "@holochain/tryorama";
+import { ActionHash, AgentPubKey, encodeHashToBase64 } from "@holochain/client";
+import { AppWithOptions, dhtSync, runScenario } from "@holochain/tryorama";
 import { decode, encode } from "@msgpack/msgpack";
 
 import { getCellByRoleName } from "./common.js";
@@ -29,7 +25,9 @@ test("Create Thing and update it twice", async () => {
     const testAppPath = process.cwd() + "/../workdir/generic-dna.happ";
 
     // Set up the app to be installed
-    const appSource = { appBundleSource: { path: testAppPath } };
+    const appSource: AppWithOptions = {
+      appBundleSource: { type: "path", value: testAppPath },
+    };
 
     // Add 2 players with the test app to the Scenario. The returned players
     // can be destructured.
@@ -140,7 +138,9 @@ test("Create Thing and a bidirectional link from the creator, then delete it and
     const testAppPath = process.cwd() + "/../workdir/generic-dna.happ";
 
     // Set up the app to be installed
-    const appSource = { appBundleSource: { path: testAppPath } };
+    const appSource: AppWithOptions = {
+      appBundleSource: { type: "path", value: testAppPath },
+    };
 
     // Add 2 players with the test app to the Scenario. The returned players
     // can be destructured.
@@ -181,13 +181,17 @@ test("Create Thing and a bidirectional link from the creator, then delete it and
 
     // Get the links pointing away from the thing node
     const thingNode: NodeId = { type: "Thing", id: thing.id };
-    const linkedAgents: [AgentPubKey, LinkTagContent][] = await bobCell.callZome({
-      zome_name: "generic_zome",
-      fn_name: "get_linked_agents",
-      payload: thingNode,
-    });
+    const linkedAgents: [AgentPubKey, LinkTagContent][] =
+      await bobCell.callZome({
+        zome_name: "generic_zome",
+        fn_name: "get_linked_agents",
+        payload: thingNode,
+      });
     assert(linkedAgents.length === 1);
-    assert.equal(encodeHashToBase64(aliceCell.cell_id[1]), encodeHashToBase64(linkedAgents[0][0]));
+    assert.equal(
+      encodeHashToBase64(aliceCell.cell_id[1]),
+      encodeHashToBase64(linkedAgents[0][0])
+    );
     // A backlink action hash should exist pointing to the backlink from the agent anchor to the thing
     assert(!!linkedAgents[0][1].backlink_action_hash);
     assert.deepEqual(linkedAgents[0][1].target_node_id, aliceAgentAnchor);
@@ -200,8 +204,10 @@ test("Create Thing and a bidirectional link from the creator, then delete it and
       payload: thingNode,
     });
     assert(linkedNodesFromThing.length === 1);
-    assert.deepEqual(linkedNodesFromThing[0], { type: "Agent", content: aliceCell.cell_id[1]});
-
+    assert.deepEqual(linkedNodesFromThing[0], {
+      type: "Agent",
+      content: aliceCell.cell_id[1],
+    });
 
     // Get the links pointing towards the thing node from the agent anchor
     const linkedNodes: NodeContent[] = await bobCell.callZome({
@@ -225,18 +231,21 @@ test("Create Thing and a bidirectional link from the creator, then delete it and
     assert(linkedThings.length === 1);
     assert.deepEqual(linkedThings[0], thing);
 
-    const linkedThingIds: [ActionHash, LinkTagContent][] = await bobCell.callZome({
-      zome_name: "generic_zome",
-      fn_name: "get_linked_thing_ids",
-      payload: aliceAgentAnchor,
-    });
+    const linkedThingIds: [ActionHash, LinkTagContent][] =
+      await bobCell.callZome({
+        zome_name: "generic_zome",
+        fn_name: "get_linked_thing_ids",
+        payload: aliceAgentAnchor,
+      });
     assert(linkedThingIds.length === 1);
-    assert.equal(encodeHashToBase64(linkedThingIds[0][0]) ,encodeHashToBase64(thing.id));
+    assert.equal(
+      encodeHashToBase64(linkedThingIds[0][0]),
+      encodeHashToBase64(thing.id)
+    );
     assert(!linkedThingIds[0][1].backlink_action_hash);
-    assert.equal(linkedThingIds[0][1].thing_created_at , thing.created_at);
-    assert.deepEqual(linkedThingIds[0][1].target_node_id , thingNode);
+    assert.equal(linkedThingIds[0][1].thing_created_at, thing.created_at);
+    assert.deepEqual(linkedThingIds[0][1].target_node_id, thingNode);
     assert.equal(decode(linkedThingIds[0][1].tag), decode(linkInput.tag));
-
 
     // - Alice deletes the thing and the link to her agent anchor should disappear
     //   since delete_links_from_creator is set to true
@@ -256,11 +265,12 @@ test("Create Thing and a bidirectional link from the creator, then delete it and
 
     // Get the links pointing away from the thing node. They should still be the same,
     // only links poitning towards it are deleted
-    const linkedAgents2: [AgentPubKey, LinkTagContent][] = await bobCell.callZome({
-      zome_name: "generic_zome",
-      fn_name: "get_linked_agents",
-      payload: thingNode,
-    });
+    const linkedAgents2: [AgentPubKey, LinkTagContent][] =
+      await bobCell.callZome({
+        zome_name: "generic_zome",
+        fn_name: "get_linked_agents",
+        payload: thingNode,
+      });
     assert(linkedAgents2.length === 1);
 
     const linkedNodesFromThing2: NodeContent[] = await bobCell.callZome({
@@ -286,11 +296,12 @@ test("Create Thing and a bidirectional link from the creator, then delete it and
     });
     assert(linkedThings2.length === 0);
 
-    const linkedThingIds2: [ActionHash, LinkTagContent][] = await bobCell.callZome({
-      zome_name: "generic_zome",
-      fn_name: "get_linked_thing_ids",
-      payload: aliceAgentAnchor,
-    });
+    const linkedThingIds2: [ActionHash, LinkTagContent][] =
+      await bobCell.callZome({
+        zome_name: "generic_zome",
+        fn_name: "get_linked_thing_ids",
+        payload: aliceAgentAnchor,
+      });
     assert(linkedThingIds2.length === 0);
   });
 });
@@ -302,7 +313,9 @@ test("Create Thing and an anchor, then delete the thing and the anchor link", as
     const testAppPath = process.cwd() + "/../workdir/generic-dna.happ";
 
     // Set up the app to be installed
-    const appSource = { appBundleSource: { path: testAppPath } };
+    const appSource: AppWithOptions = {
+      appBundleSource: { type: "path", value: testAppPath },
+    };
 
     // Add 2 players with the test app to the Scenario. The returned players
     // can be destructured.
@@ -364,18 +377,21 @@ test("Create Thing and an anchor, then delete the thing and the anchor link", as
     assert(linkedThings.length === 1);
     assert.deepEqual(linkedThings[0], thing);
 
-    const linkedThingIds: [ActionHash, LinkTagContent][] = await bobCell.callZome({
-      zome_name: "generic_zome",
-      fn_name: "get_linked_thing_ids",
-      payload: allThingsAnchor,
-    });
+    const linkedThingIds: [ActionHash, LinkTagContent][] =
+      await bobCell.callZome({
+        zome_name: "generic_zome",
+        fn_name: "get_linked_thing_ids",
+        payload: allThingsAnchor,
+      });
     assert(linkedThingIds.length === 1);
-    assert.equal(encodeHashToBase64(linkedThingIds[0][0]) ,encodeHashToBase64(thing.id));
+    assert.equal(
+      encodeHashToBase64(linkedThingIds[0][0]),
+      encodeHashToBase64(thing.id)
+    );
     assert(!linkedThingIds[0][1].backlink_action_hash);
-    assert.equal(linkedThingIds[0][1].thing_created_at , thing.created_at);
-    assert.deepEqual(linkedThingIds[0][1].target_node_id , thingNode);
+    assert.equal(linkedThingIds[0][1].thing_created_at, thing.created_at);
+    assert.deepEqual(linkedThingIds[0][1].target_node_id, thingNode);
     assert.isNull(linkedThingIds[0][1].tag);
-
 
     // - Alice deletes the thing and the link to the ALL_THINGS anchor should disappear
     const deleteThingInput: DeleteThingInput = {
@@ -409,24 +425,26 @@ test("Create Thing and an anchor, then delete the thing and the anchor link", as
     });
     assert(linkedThings2.length === 0);
 
-    const linkedThingIds2: [ActionHash, LinkTagContent][] = await bobCell.callZome({
-      zome_name: "generic_zome",
-      fn_name: "get_linked_thing_ids",
-      payload: allThingsAnchor,
-    });
+    const linkedThingIds2: [ActionHash, LinkTagContent][] =
+      await bobCell.callZome({
+        zome_name: "generic_zome",
+        fn_name: "get_linked_thing_ids",
+        payload: allThingsAnchor,
+      });
     assert(linkedThingIds2.length === 0);
   });
 });
 
-
-test("Create Thing and an anchor, then IMMEDIATELY delete the thing and the anchor link", async () => {
+test("Alice Creates Thing and an anchor link, Bob deletes the thing and the anchor link", async () => {
   await runScenario(async (scenario) => {
     // Construct proper paths for your app.
     // This assumes app bundle created by the `hc app pack` command.
     const testAppPath = process.cwd() + "/../workdir/generic-dna.happ";
 
     // Set up the app to be installed
-    const appSource = { appBundleSource: { path: testAppPath } };
+    const appSource: AppWithOptions = {
+      appBundleSource: { type: "path", value: testAppPath },
+    };
 
     // Add 2 players with the test app to the Scenario. The returned players
     // can be destructured.
@@ -461,10 +479,10 @@ test("Create Thing and an anchor, then IMMEDIATELY delete the thing and the anch
       payload: thingInput,
     });
 
-    // const thingNode: NodeId = { type: "Thing", id: thing.id };
+    // - Bob tries to get the thing from the anchor
+    await dhtSync([alice, bob], aliceCell.cell_id[0]);
 
-    // IMMEDIATELY have Bob delete it without dht sync to check that deletion works also if the link
-    // has only been propagated via remote signals
+    // - Bob deletes the thing and the link to the ALL_THINGS anchor should disappear
     const deleteThingInput: DeleteThingInput = {
       thing_id: thing.id,
       delete_backlinks: false,
@@ -477,16 +495,106 @@ test("Create Thing and an anchor, then IMMEDIATELY delete the thing and the anch
       payload: deleteThingInput,
     });
 
-    // - Check that Alice cannot find it anymore
+    // Alice tries to get the linked nodes again and they should all be zero now
     await dhtSync([alice, bob], aliceCell.cell_id[0]);
 
-    // Get the links pointing towards the thing node from the ALL_THINGS anchor
-    const linkedNodes: NodeContent[] = await aliceCell.callZome({
+    // Get the links pointing towards the thing node from the ALL_THINGS anchor.
+    // They should have been deleted now.
+    const linkedNodes2: NodeContent[] = await aliceCell.callZome({
       zome_name: "generic_zome",
       fn_name: "get_all_linked_nodes",
       payload: allThingsAnchor,
     });
+    assert(linkedNodes2.length === 0);
 
-    assert(linkedNodes.length === 0);
+    const linkedThings2: Thing[] = await aliceCell.callZome({
+      zome_name: "generic_zome",
+      fn_name: "get_linked_things",
+      payload: allThingsAnchor,
+    });
+    assert(linkedThings2.length === 0);
+
+    const linkedThingIds2: [ActionHash, LinkTagContent][] =
+      await bobCell.callZome({
+        zome_name: "generic_zome",
+        fn_name: "get_linked_thing_ids",
+        payload: allThingsAnchor,
+      });
+    assert(linkedThingIds2.length === 0);
   });
 });
+
+// This test doesn't really make sense
+// test("Create Thing and an anchor, then IMMEDIATELY delete the thing and the anchor link", async () => {
+//   await runScenario(async (scenario) => {
+//     // Construct proper paths for your app.
+//     // This assumes app bundle created by the `hc app pack` command.
+//     const testAppPath = process.cwd() + "/../workdir/generic-dna.happ";
+
+//     // Set up the app to be installed
+//     const appSource: AppWithOptions = {
+//       appBundleSource: { type: "path", value: testAppPath },
+//     };
+
+//     // Add 2 players with the test app to the Scenario. The returned players
+//     // can be destructured.
+//     const [alice, bob] = await scenario.addPlayersWithApps([
+//       appSource,
+//       appSource,
+//     ]);
+
+//     // Shortcut peer discovery through gossip and register all agents in every
+//     // conductor of the scenario.
+//     await scenario.shareAllAgents();
+
+//     const aliceCell = getCellByRoleName(alice, "generic_dna");
+//     const bobCell = getCellByRoleName(bob, "generic_dna");
+
+//     // Alice creates a Thing and a bidirectional link to her agent anchor
+//     const allThingsAnchor: NodeId = {
+//       type: "Anchor",
+//       id: "ALL_THINGS",
+//     };
+//     let linkInput: LinkInput = {
+//       direction: LinkDirection.From,
+//       node_id: allThingsAnchor,
+//     };
+//     const thingInput: CreateThingInput = {
+//       content: "hello",
+//       links: [linkInputToRustFormat(linkInput)],
+//     };
+//     const thing: Thing = await aliceCell.callZome({
+//       zome_name: "generic_zome",
+//       fn_name: "create_thing",
+//       payload: thingInput,
+//     });
+
+//     // const thingNode: NodeId = { type: "Thing", id: thing.id };
+
+//     // IMMEDIATELY have Bob delete it without dht sync to check that deletion works also if the link
+//     // has only been propagated via remote signals
+//     const deleteThingInput: DeleteThingInput = {
+//       thing_id: thing.id,
+//       delete_backlinks: false,
+//       delete_links_from_creator: false,
+//       delete_links: [linkInputToRustFormat(linkInput)],
+//     };
+//     await bobCell.callZome({
+//       zome_name: "generic_zome",
+//       fn_name: "delete_thing",
+//       payload: deleteThingInput,
+//     });
+
+//     // - Check that Alice cannot find it anymore
+//     await dhtSync([alice, bob], aliceCell.cell_id[0]);
+
+//     // Get the links pointing towards the thing node from the ALL_THINGS anchor
+//     const linkedNodes: NodeContent[] = await aliceCell.callZome({
+//       zome_name: "generic_zome",
+//       fn_name: "get_all_linked_nodes",
+//       payload: allThingsAnchor,
+//     });
+
+//     assert(linkedNodes.length === 0);
+//   });
+// });

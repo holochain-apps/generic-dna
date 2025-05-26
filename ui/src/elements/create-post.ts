@@ -33,6 +33,7 @@ export class CreatePost extends LitElement {
           },
         },
       ]);
+      this._content = '';
     } catch (e) {
       console.error((e as HolochainError).message);
       alert((e as HolochainError).message);

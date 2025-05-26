@@ -4,12 +4,12 @@ import {
   AgentPubKey,
   AgentPubKeyB64,
   AnyDhtHash,
-  AppCallZomeRequest,
   AppClient,
   AppWebsocket,
   AppWebsocketConnectionOptions,
   encodeHashToBase64,
   Record as HolochainRecord,
+  RoleNameCallZomeRequest,
 } from "@holochain/client";
 import {
   CreateOrDeleteLinksInput,
@@ -821,7 +821,7 @@ export class SimpleHolochain {
   }
 
   private callZome(fn_name: string, payload: any) {
-    const req: AppCallZomeRequest = {
+    const req: RoleNameCallZomeRequest = {
       role_name: this.roleName,
       zome_name: this.zomeName,
       fn_name,
